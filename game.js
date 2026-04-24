@@ -161,6 +161,26 @@ vec3 calcNormal(vec3 p){
   ));
 }
 
+float Voronesque(vec3 p){
+  vec3 i = floor(p + dot(p, vec3(0.333333)));
+  p -= i - dot(i, vec3(0.166666));
+  vec3 i1 = step(p.yzx, p);
+  vec3 i2 = max(i1, 1.0 - i1.zxy);
+  i1 = min(i1, 1.0 - i1.zxy);
+  vec3 p1 = p - i1 + 0.166666;
+  vec3 p2 = p - i2 + 0.333333;
+  vec3 p3 = p - 0.5;
+  vec3 rnd = vec3(7.0, 157.0, 113.0);
+  vec4 v = max(0.5 - vec4(dot(p, p), dot(p1, p1), dot(p2, p2), dot(p3, p3)), 0.0);
+  vec4 d = vec4(dot(i, rnd), dot(i + i1, rnd), dot(i + i2, rnd), dot(i + 1.0, rnd));
+  d = fract(sin(d) * 262144.0) * v * 2.0;
+  v.x = max(d.x, d.y);
+  v.y = max(d.z, d.w);
+  v.z = max(min(d.x, d.y), min(d.z, d.w));
+  v.w = min(v.x, v.y);
+  return max(v.x, v.y) - max(v.z, v.w);
+}
+
 float softShadow(vec3 ro, vec3 rd, float mx){
   float res = 1.0;
   float t = 0.05;
@@ -201,8 +221,12 @@ void main(){
 
   float t = 0.0;
   float hit = 0.0;
+  float minPD = 100.0;
+  vec3 plc = playerAt(playerZAt(gameTime));
   for (int i = 0; i < 128; i++) {
-    float d = map(ro + rd * t);
+    vec3 pp = ro + rd * t;
+    minPD = min(minPD, playerSDF(pp, plc));
+    float d = map(pp);
     if (d < 0.01) { hit = 1.0; break; }
     t += d * 0.8;
     if (t > 120.0) break;
@@ -218,7 +242,8 @@ void main(){
 
   float ring = 0.5 + 0.5 * cos(p.z * 0.5);
   vec3 tunnelCol = mix(vec3(0.08, 0.02, 0.22), vec3(0.2, 0.75, 0.95), ring);
-  vec3 obsCol    = vec3(1.0, 0.15, 0.65);
+  float qShift = 0.5 + 0.5 * sin(p.z * 0.3 + gameTime * 0.6);
+  vec3 obsCol    = mix(vec3(0.2, 0.9, 0.65), vec3(0.55, 0.25, 0.9), qShift);
   vec3 playerCol = vec3(1.0, 0.92, 0.7);
   vec3 col = mix(tunnelCol, obsCol, isObs);
   col = mix(col, playerCol, isPlayer);
@@ -226,20 +251,59 @@ void main(){
   vec3 lp = playerAt(tt);
   if (hit > 0.5 && isPlayer < 0.5) {
     vec3 n = calcNormal(p);
+    float vc = Voronesque(p * 2.5);
+    vec2 eps = vec2(0.025, 0.0);
+    vec3 gr = (vec3(
+      Voronesque((p - eps.xyy) * 2.5),
+      Voronesque((p - eps.yxy) * 2.5),
+      Voronesque((p - eps.yyx) * 2.5)
+    ) - vc) / eps.x;
+    gr -= n * dot(n, gr);
+    n = normalize(n + gr * 0.08);
     vec3 off = vec3(0.0, splitAmt * 0.6, 0.0);
     float cA = lightContrib(p, n, lp + off);
     float cB = lightContrib(p, n, lp - off);
-    col *= 0.08 + 1.3 * (1.0 - flatAmt * 0.4) * (cA + cB);
+    col *= (0.45 + 0.75 * vc) * (0.08 + 1.3 * (1.0 - flatAmt * 0.4) * (cA + cB));
   }
 
   if (isPlayer > 0.5) {
-    col = playerCol;
+    vec3 pc = playerAt(tt);
+    vec3 rel = p - pc;
+    float ra = gameTime * 1.9;
+    float rb = gameTime * 1.3;
+    float ca = cos(ra), sa = sin(ra);
+    float cb = cos(rb), sb = sin(rb);
+    vec3 rr = vec3(ca * rel.x - sa * rel.z, rel.y, sa * rel.x + ca * rel.z);
+    rr = vec3(rr.x, cb * rr.y - sb * rr.z, sb * rr.y + cb * rr.z);
+    vec3 nd = normalize(rel);
+    float wob = 1.0 + 0.22 * sin(gameTime * 6.5 + rel.x * 4.0 + rel.y * 3.0);
+    float n1 = Voronesque(rr * 9.0 * wob + vec3(0.0, 0.0, gameTime * 1.6));
+    float n2 = Voronesque(rr * 22.0 - vec3(gameTime * 1.1));
+    float frac = clamp(n1 * 0.7 + n2 * 0.45, 0.0, 1.0);
+    vec3 rn = normalize(rr);
+    float theta = atan(rn.y, rn.x);
+    float phi = acos(clamp(rn.z, -1.0, 1.0));
+    float rays = 0.5 + 0.5 * sin(theta * 9.0 + gameTime * 2.5) * cos(phi * 7.0 - gameTime * 1.7);
+    rays = pow(rays, 2.2);
+    float fres = pow(1.0 - abs(dot(nd, rd)), 2.2);
+    float puls = 0.82 + 0.18 * sin(gameTime * 4.5);
+    vec3 core = mix(vec3(0.9, 0.82, 0.55), vec3(1.0, 0.5, 0.22), frac);
+    vec3 rayCol = vec3(0.8, 1.0, 0.5);
+    vec3 rimCol = vec3(0.95, 0.65, 1.25);
+    vec3 base = core * puls;
+    base = mix(base, base + rayCol * 0.32, rays);
+    base += rimCol * fres * 0.85;
+    col = base;
   }
 
   col = mix(tunnelCol * 0.05, col, hit);
 
   float fog = 1.0 / (1.0 + t * t * 0.002);
   col *= fog;
+
+  float glow = exp(-max(minPD, 0.0) * 5.5);
+  float glowPuls = 0.85 + 0.15 * sin(gameTime * 3.2);
+  col += vec3(1.0, 0.72, 1.3) * glow * glowPuls * 0.55;
 
   gl_FragColor = vec4(col, 1.0);
 }
