@@ -70,12 +70,21 @@ float playerSDF(vec3 p, vec3 c){
   vec3 r = vec3(0.2 + flatAmt * 0.05, 0.2 - flatAmt * 0.13, 0.2 + flatAmt * 0.05);
   float pa = sdEllipsoid(p - c - off, r);
   float pb = sdEllipsoid(p - c + off, r);
-  return smin(pa, pb, max(splitAmt * 0.85, 0.001));
+  float d = smin(pa, pb, max(splitAmt * 0.85, 0.001));
+  vec3 lp = p - c;
+  float def = sin(lp.x * 7.0 + gameTime * 2.3)
+            * sin(lp.y * 6.0 + gameTime * 1.9)
+            * sin(lp.z * 8.0 + gameTime * 2.1) * 0.035;
+  def += sin(gameTime * 3.5 + lp.y * 11.0) * cos(gameTime * 2.7 + lp.x * 9.0) * 0.02;
+  return d - def;
 }
 
 float tunnelDist(vec3 q){
-  float bump = cos(q.x * 1.3) * cos(q.y * 1.3) * 0.2
-             + cos(q.z * 1.5 + gameTime * 1.3) * cos(q.x * 2.4) * cos(q.y * 2.4) * 0.08;
+  float a = gameTime * 0.5 + q.z * 0.08;
+  float ca = cos(a), sa = sin(a);
+  vec2 rq = vec2(ca * q.x - sa * q.y, sa * q.x + ca * q.y);
+  float bump = cos(rq.x * 1.3) * cos(rq.y * 1.3) * 0.2
+             + cos(q.z * 1.5 + gameTime * 1.3) * cos(rq.x * 2.4) * cos(rq.y * 2.4) * 0.08;
   return 3.0 - length(q.xy) + bump;
 }
 
@@ -223,6 +232,8 @@ void main(){
   float hit = 0.0;
   float minPD = 100.0;
   vec3 plc = playerAt(playerZAt(gameTime));
+  float plDepth = max(dot(plc - ro, f), 0.01);
+  vec2 uvPlayer = 1.5 * vec2(dot(plc - ro, r), dot(plc - ro, u)) / plDepth;
   for (int i = 0; i < 128; i++) {
     vec3 pp = ro + rd * t;
     minPD = min(minPD, playerSDF(pp, plc));
@@ -277,22 +288,25 @@ void main(){
     rr = vec3(rr.x, cb * rr.y - sb * rr.z, sb * rr.y + cb * rr.z);
     vec3 nd = normalize(rel);
     float wob = 1.0 + 0.22 * sin(gameTime * 6.5 + rel.x * 4.0 + rel.y * 3.0);
-    float n1 = Voronesque(rr * 9.0 * wob + vec3(0.0, 0.0, gameTime * 1.6));
-    float n2 = Voronesque(rr * 22.0 - vec3(gameTime * 1.1));
+    vec3 flow1 = vec3(sin(gameTime * 0.9) * 2.0, cos(gameTime * 1.2) * 1.6, gameTime * 2.4);
+    vec3 flow2 = vec3(cos(gameTime * 1.4) * 1.8, sin(gameTime * 1.1) * 2.0, -gameTime * 1.7);
+    float n1 = Voronesque(rr * 9.0 * wob + flow1);
+    float n2 = Voronesque(rr * 22.0 + flow2);
     float frac = clamp(n1 * 0.7 + n2 * 0.45, 0.0, 1.0);
-    vec3 rn = normalize(rr);
-    float theta = atan(rn.y, rn.x);
-    float phi = acos(clamp(rn.z, -1.0, 1.0));
-    float rays = 0.5 + 0.5 * sin(theta * 9.0 + gameTime * 2.5) * cos(phi * 7.0 - gameTime * 1.7);
-    rays = pow(rays, 2.2);
+    vec2 sDir = uv - uvPlayer;
+    float sAng = atan(sDir.y, sDir.x);
+    float rays = 0.5 + 0.5 * sin(sAng * 7.0 + gameTime * 2.0);
+    rays *= 0.5 + 0.5 * sin(sAng * 3.0 - gameTime * 1.2);
+    rays = pow(max(rays, 0.0), 2.0);
     float fres = pow(1.0 - abs(dot(nd, rd)), 2.2);
-    float puls = 0.82 + 0.18 * sin(gameTime * 4.5);
-    vec3 core = mix(vec3(0.9, 0.82, 0.55), vec3(1.0, 0.5, 0.22), frac);
-    vec3 rayCol = vec3(0.8, 1.0, 0.5);
-    vec3 rimCol = vec3(0.95, 0.65, 1.25);
+    float puls = 0.72 + 0.15 * sin(gameTime * 4.5);
+    vec3 core = mix(vec3(0.75, 0.66, 0.42), vec3(0.92, 0.42, 0.18), frac);
+    vec3 rayCol = vec3(1.0, 0.85, 0.5);
+    vec3 rimCol = vec3(0.8, 0.52, 1.05);
+    float rayFade = 1.0 - smoothstep(0.05, 0.35, splitAmt);
     vec3 base = core * puls;
-    base = mix(base, base + rayCol * 0.32, rays);
-    base += rimCol * fres * 0.85;
+    base += rayCol * rays * 0.32 * rayFade;
+    base += rimCol * fres * 0.55;
     col = base;
   }
 
@@ -301,9 +315,18 @@ void main(){
   float fog = 1.0 / (1.0 + t * t * 0.002);
   col *= fog;
 
-  float glow = exp(-max(minPD, 0.0) * 5.5);
+  float glow = exp(-max(minPD, 0.0) * 8.5);
   float glowPuls = 0.85 + 0.15 * sin(gameTime * 3.2);
-  col += vec3(1.0, 0.72, 1.3) * glow * glowPuls * 0.55;
+  col += vec3(0.8, 0.5, 1.0) * glow * glowPuls * 0.32;
+
+  vec2 hDir = uv - uvPlayer;
+  float ang = atan(hDir.y, hDir.x);
+  float rayHalo = 0.5 + 0.5 * sin(ang * 7.0 + gameTime * 2.0);
+  rayHalo *= 0.5 + 0.5 * sin(ang * 3.0 - gameTime * 1.2);
+  rayHalo = pow(max(rayHalo, 0.0), 2.0);
+  float rayFall = exp(-max(minPD, 0.0) * 3.2);
+  float haloFade = 1.0 - smoothstep(0.05, 0.35, splitAmt);
+  col += vec3(1.0, 0.85, 0.55) * rayHalo * rayFall * 0.45 * haloFade;
 
   gl_FragColor = vec4(col, 1.0);
 }
