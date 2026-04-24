@@ -29,7 +29,11 @@ float freeLaneOf(float i){
 }
 
 float playerZAt(float t){
-  return 10.0 + 16.0 * t + 0.0125 * t * t;
+  float tc = min(t, 120.0);
+  float i = floor(tc / 10.0);
+  float v = 10.0 + 1.25 * i;
+  float base = 10.0 + 100.0 * i + 6.25 * i * (i - 1.0);
+  return base + v * (tc - 10.0 * i) + 25.0 * max(t - 120.0, 0.0);
 }
 
 vec2 path(float z){
@@ -68,20 +72,27 @@ float tunnelDist(vec3 q){
 float rowKind(float i){
   float n = mod(i + seed * 7.0, 128.0);
   float h = mod(mod(n * 23.0, 31.0) + mod(n * 37.0, 11.0), 10.0);
-  return step(5.0, h) + step(7.0, h) + step(9.0, h);
+  float k = step(5.0, h) + step(7.0, h) + step(9.0, h);
+  if (i < 11.0 && k > 1.5) k = mod(h, 2.0);
+  if (i < 23.0 && k > 2.5) k = 0.0;
+  float ne = mod(i + seed * 11.0, 128.0);
+  float he = mod(mod(ne * 41.0, 17.0) + mod(ne * 43.0, 11.0), 10.0);
+  if (he > 3.5) k = 4.0;
+  return k;
 }
 
 float obsDist(vec3 q){
   float rowIdx = floor((q.z + 2.5) / 15.0);
   float rz = mod(q.z + 2.5, 15.0) - 7.5;
   float kind = rowKind(rowIdx);
+  if (kind > 3.5) return 100.0;
   if (kind > 2.5) {
     float slab = abs(rz) - 0.2;
     float slit = abs(q.y) - 0.12;
     return max(slab, -slit);
   }
   if (kind > 1.5) {
-    return length(vec2(q.y, rz)) - 0.4;
+    return length(vec2(q.y, rz)) - 0.28;
   }
   float freeLane = freeLaneOf(rowIdx);
   float isCol = kind;
@@ -360,17 +371,29 @@ function update(_t, delta) {
     this.smoothLane += (this.lane - this.smoothLane) * 0.2;
 
     const t = this.gameTime;
-    const pz = 10 + 16 * t + 0.0125 * t * t;
+    const tc = Math.min(t, 120);
+    const si = Math.floor(tc / 10);
+    const sv = 10 + 1.25 * si;
+    const sb = 10 + 100 * si + 6.25 * si * (si - 1);
+    const pz = sb + sv * (tc - 10 * si) + 25 * Math.max(t - 120, 0);
     const rowIdx = Math.floor((pz + 2.5) / 15);
     const dz = pz - (15 * rowIdx + 5);
     if (Math.abs(dz) < 0.95) {
       const nk = (((rowIdx + this.seed * 7) % 128) + 128) % 128;
-      const h = ((nk * 23) % 31 + (nk * 37) % 11) % 10;
+      const hh = ((nk * 23) % 31 + (nk * 37) % 11) % 10;
       const n = (((rowIdx + this.seed) % 128) + 128) % 128;
+      let k = (hh >= 5 ? 1 : 0) + (hh >= 7 ? 1 : 0) + (hh >= 9 ? 1 : 0);
+      if (rowIdx < 11 && k > 1) k = hh % 2;
+      if (rowIdx < 23 && k > 2) k = 0;
+      const ne = (((rowIdx + this.seed * 11) % 128) + 128) % 128;
+      const he = ((ne * 41) % 17 + (ne * 43) % 11) % 10;
+      if (he >= 4) k = 4;
       let hit = false;
-      if (h >= 9) {
+      if (k === 4) {
+        hit = false;
+      } else if (k === 3) {
         hit = this.flatAmount < 0.9;
-      } else if (h >= 7) {
+      } else if (k === 2) {
         hit = this.splitAmount < 0.9;
       } else {
         const freeLane = (((n * 11) % 7) + ((n * 13) % 5)) % 3;
