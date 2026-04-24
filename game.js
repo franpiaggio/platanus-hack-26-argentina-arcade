@@ -22,6 +22,7 @@ uniform float playerLane;
 uniform float splitAmt;
 uniform float flatAmt;
 uniform float seed;
+uniform float orbLives;
 
 float freeLaneOf(float i){
   float n = mod(i + seed, 128.0);
@@ -67,7 +68,7 @@ float sdEllipsoid(vec3 p, vec3 r){
 
 float playerSDF(vec3 p, vec3 c){
   vec3 off = vec3(0.0, splitAmt * 0.6, 0.0);
-  vec3 r = vec3(0.2 + flatAmt * 0.05, 0.2 - flatAmt * 0.13, 0.2 + flatAmt * 0.05);
+  vec3 r = vec3(0.12 + flatAmt * 0.03, 0.12 - flatAmt * 0.08, 0.12 + flatAmt * 0.03);
   float pa = sdEllipsoid(p - c - off, r);
   float pb = sdEllipsoid(p - c + off, r);
   float d = smin(pa, pb, max(splitAmt * 0.85, 0.001));
@@ -220,8 +221,8 @@ void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5 * resolution.xy) / resolution.y;
 
   float tt = playerZAt(gameTime);
-  float cz = tt - 1.25;
-  vec3 ro = vec3(path(cz).x, path(cz).y + 0.8, cz);
+  float cz = tt - 1.35;
+  vec3 ro = vec3(path(cz).x, path(cz).y + 0.5, cz);
   vec3 ta = vec3(path(tt + 5.0), tt + 5.0);
 
   vec3 f = normalize(ta - ro);
@@ -363,6 +364,37 @@ void main(){
   float glowPuls = 0.85 + 0.15 * sin(gameTime * 3.2);
   col += vec3(1.0, 0.4, 0.75) * glow * glowPuls * 0.32;
 
+  float orbR = 0.38;
+  float halfOff = splitAmt * 0.6;
+  for (int k = 0; k < 2; k++) {
+    if (float(k) >= orbLives) continue;
+    float fk = float(k);
+    float a = gameTime * (1.8 + 0.35 * fk) + fk * 3.14159;
+    vec3 axA, axB;
+    vec3 oc;
+    if (k == 0) {
+      axA = vec3(1.0, 0.0, 0.0);
+      axB = normalize(vec3(0.0, 1.0, 0.6));
+      oc = vec3(0.35, 0.9, 1.2);
+    } else {
+      axA = normalize(vec3(0.8, 0.5, 0.0));
+      axB = vec3(0.0, 0.0, 1.0);
+      oc = vec3(0.95, 0.5, 1.15);
+    }
+    float side = k == 0 ? 1.0 : -1.0;
+    vec3 center = plc + vec3(0.0, side * halfOff, 0.0);
+    vec3 orbPos = center + (axA * cos(a) + axB * sin(a)) * orbR;
+    float oz = dot(orbPos - ro, f);
+    if (oz > 0.1) {
+      vec2 uvO = 0.65 * vec2(dot(orbPos - ro, r), dot(orbPos - ro, u)) / oz;
+      vec2 dO = uv - uvO;
+      float d2 = dot(dO, dO);
+      float s2 = 0.00035 / (oz * oz);
+      float core = exp(-d2 / s2);
+      float halo = exp(-d2 / (s2 * 16.0));
+      col += oc * (core * 1.4 + halo * 0.22);
+    }
+  }
 
   gl_FragColor = vec4(col, 1.0);
 }
@@ -407,7 +439,10 @@ function initAudio(scene) {
   if (!ctx || !ctx.createGain) return;
   const master = ctx.createGain();
   master.gain.value = 0;
-  master.connect(ctx.destination);
+  const muteGate = ctx.createGain();
+  muteGate.gain.value = 0;
+  master.connect(muteGate);
+  muteGate.connect(ctx.destination);
 
   const lfo = ctx.createOscillator();
   const lfoGain = ctx.createGain();
@@ -439,7 +474,7 @@ function initAudio(scene) {
   const nd = noiseBuf.getChannelData(0);
   for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
 
-  scene.audio = { ctx: ctx, master: master, voices: voices, fxBus: fxBus, noiseBuf: noiseBuf, lastGain: -1, lastRoot: root0 };
+  scene.audio = { ctx: ctx, master: master, muteGate: muteGate, voices: voices, fxBus: fxBus, noiseBuf: noiseBuf, lastGain: -1, lastMute: -1, lastRoot: root0 };
 }
 
 function currentPool(t) {
@@ -634,10 +669,17 @@ function updateDrone(scene) {
     }
     a.lastRoot = root;
   }
-  const target = scene.state === 'playing' ? 0.085 : inMenu ? 0.04 : 0;
+  const target = scene.state === 'playing' ? 0.12 : 0;
   if (a.lastGain !== target) {
-    a.master.gain.setTargetAtTime(target, now, scene.state === 'playing' ? 0.6 : 0.3);
+    a.master.gain.cancelScheduledValues(now);
+    a.master.gain.setValueAtTime(target, now);
     a.lastGain = target;
+  }
+  const muteTarget = scene.musicMuted ? 0 : 1;
+  if (a.lastMute !== muteTarget) {
+    a.muteGate.gain.cancelScheduledValues(now);
+    a.muteGate.gain.setValueAtTime(muteTarget, now);
+    a.lastMute = muteTarget;
   }
 }
 
@@ -650,6 +692,7 @@ function create() {
     splitAmt: { type: '1f', value: 0 },
     flatAmt: { type: '1f', value: 0 },
     seed: { type: '1f', value: 0 },
+    orbLives: { type: '1f', value: 2 },
   };
   const baseShader = new Phaser.Display.BaseShader('bg', FRAG, undefined, uniforms);
   this.shader = this.add.shader(baseShader, GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT);
@@ -670,6 +713,8 @@ function create() {
   this.splitAmount = 0;
   this.flatAmount = 0;
   this.lastBeatIdx = -1;
+  this.orbLives = 2;
+  this.invulnerableUntil = 0;
   this.seed = Math.floor(Math.random() * 128);
   this.state = 'menu';
   this.menuIndex = 0;
@@ -692,6 +737,11 @@ function create() {
         .filter((e) => e && typeof e.name === 'string' && typeof e.score === 'number')
         .slice(0, MAX_SCORES);
     }
+  });
+  this.musicMuted = true;
+  this.store.get('tunnel-runner-music-muted').then((r) => {
+    this.musicMuted = r && r.found ? !!r.value : false;
+    showMenu(this);
   });
 
   showMenu(this);
@@ -721,17 +771,17 @@ function showMenu(scene) {
   addText(scene, GAME_WIDTH / 2, 138, 'QUANTUM TUNNEL', 52, '#b8ffea', true);
   addText(scene, GAME_WIDTH / 2, 184, 'collapse the wavefunction · clear the path', 13, '#ff6ec7');
 
-  const items = ['PLAY', 'LEADERBOARD', 'CONTROLS'];
+  const items = ['PLAY', 'MUSIC: ' + (scene.musicMuted ? 'OFF' : 'ON'), 'LEADERBOARD', 'CONTROLS'];
   items.forEach((label, i) => {
-    const y = 258 + i * 52;
+    const y = 240 + i * 48;
     const sel = i === scene.menuIndex;
     const g = scene.add.graphics();
     g.fillStyle(sel ? 0xb8ffea : 0x12162a, sel ? 1.0 : 0.85);
     g.lineStyle(2, sel ? 0xb8ffea : 0x3a4068, 1);
-    g.fillRoundedRect(GAME_WIDTH / 2 - 150, y - 20, 300, 40, 6);
-    g.strokeRoundedRect(GAME_WIDTH / 2 - 150, y - 20, 300, 40, 6);
+    g.fillRoundedRect(GAME_WIDTH / 2 - 150, y - 18, 300, 36, 6);
+    g.strokeRoundedRect(GAME_WIDTH / 2 - 150, y - 18, 300, 36, 6);
     (scene.overlay || (scene.overlay = [])).push(g);
-    addText(scene, GAME_WIDTH / 2, y, label, 22, sel ? '#0a0f1f' : '#fff', true);
+    addText(scene, GAME_WIDTH / 2, y, label, 20, sel ? '#0a0f1f' : '#fff', true);
   });
 
   addText(scene, GAME_WIDTH / 2, GAME_HEIGHT - 24, 'JOYSTICK · START', 13, '#555');
@@ -811,15 +861,20 @@ function update(_t, delta) {
   const JD = Phaser.Input.Keyboard.JustDown;
 
   if (this.state === 'menu') {
+    if (this.audio && this.audio.ctx && this.audio.ctx.state === 'suspended') this.audio.ctx.resume();
     let redraw = false;
-    if (JD(k.U)) { this.menuIndex = (this.menuIndex + 2) % 3; redraw = true; }
-    if (JD(k.D)) { this.menuIndex = (this.menuIndex + 1) % 3; redraw = true; }
+    if (JD(k.U)) { this.menuIndex = (this.menuIndex + 3) % 4; redraw = true; }
+    if (JD(k.D)) { this.menuIndex = (this.menuIndex + 1) % 4; redraw = true; }
     if (redraw) showMenu(this);
     if (JD(k.S)) {
       if (this.menuIndex === 0) {
         clearOverlay(this);
         this.state = 'playing';
       } else if (this.menuIndex === 1) {
+        this.musicMuted = !this.musicMuted;
+        try { this.store.set('tunnel-runner-music-muted', this.musicMuted); } catch (e) {}
+        showMenu(this);
+      } else if (this.menuIndex === 2) {
         this.state = 'leaderboard';
         showLeaderboard(this, -1);
       } else {
@@ -837,8 +892,8 @@ function update(_t, delta) {
     const bi = Math.floor(this.gameTime / 0.125);
     if (bi !== this.lastBeatIdx) {
       this.lastBeatIdx = bi;
-      if (bi % 4 === 0) playKick(this);
-      if (this.gameTime >= 30 && bi % 4 === 2) playHiHat(this, 1);
+      if (!this.musicMuted && bi % 4 === 0) playKick(this);
+      if (!this.musicMuted && this.gameTime >= 30 && bi % 4 === 2) playHiHat(this, 1);
     }
     if (JD(k.L)) {
       this.lane = Math.max(-1, this.lane - 1);
@@ -873,9 +928,9 @@ function update(_t, delta) {
       } else if (k === 4) {
         hit = false;
       } else if (k === 3) {
-        hit = effFlat < 0.9;
+        hit = effFlat < 0.9 || effSplit >= 0.5;
       } else if (k === 2) {
-        hit = effSplit < 0.9;
+        hit = effSplit < 0.9 || effFlat >= 0.5;
       } else {
         const freeLane = (((n * 11) % 7) + ((n * 13) % 5)) % 3;
         const plx = this.smoothLane * 1.2;
@@ -885,13 +940,19 @@ function update(_t, delta) {
           if (dx * dx + dz * dz < 0.49) { hit = true; break; }
         }
       }
-      if (hit) {
-        this.finalScore = this.gameTime;
-        this.initials = [0, 0, 0, 0];
-        this.slot = 0;
-        this.state = 'nameEntry';
-        playLoseFx(this);
-        showNameEntry(this);
+      if (hit && this.gameTime >= this.invulnerableUntil) {
+        this.orbLives -= 1;
+        if (this.orbLives <= 0) {
+          this.finalScore = this.gameTime;
+          this.initials = [0, 0, 0, 0];
+          this.slot = 0;
+          this.state = 'nameEntry';
+          playLoseFx(this);
+          showNameEntry(this);
+        } else {
+          this.invulnerableUntil = this.gameTime + 1.2;
+          playLoseFx(this);
+        }
       }
     }
   } else if (this.state === 'nameEntry') {
@@ -928,6 +989,8 @@ function update(_t, delta) {
       this.splitAmount = 0;
       this.flatAmount = 0;
       this.lastBeatIdx = -1;
+      this.orbLives = 2;
+      this.invulnerableUntil = 0;
       this.seed = Math.floor(Math.random() * 128);
       this.menuIndex = 0;
       this.state = 'menu';
@@ -944,4 +1007,5 @@ function update(_t, delta) {
   this.shader.setUniform('splitAmt.value', this.splitAmount);
   this.shader.setUniform('flatAmt.value', this.flatAmount);
   this.shader.setUniform('seed.value', this.seed);
+  this.shader.setUniform('orbLives.value', this.orbLives);
 }
