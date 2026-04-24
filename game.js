@@ -272,14 +272,27 @@ void main(){
   }
   vec3 palDark = mix(dA, dB, palT);
   vec3 palLight = mix(lA, lB, palT);
-  float cNoise = Voronesque(p * 0.28 + vec3(gameTime * 0.04, gameTime * 0.03, gameTime * 0.05));
+  float cNoise = Voronesque(p * 0.28 + vec3(gameTime * 0.12, gameTime * 0.09, gameTime * 0.15));
   float cBand = 0.5 + 0.5 * sin(atan(q.y, q.x) * 2.0 + p.z * 0.12);
-  float cMix = clamp(cNoise * 0.7 + cBand * 0.4, 0.0, 1.0);
-  vec3 cWarm = vec3(1.2, 0.85, 0.7);
-  vec3 cCool = vec3(0.7, 0.95, 1.25);
-  vec3 tintL = mix(cCool, cWarm, cMix);
-  vec3 tintD = mix(vec3(0.8, 1.0, 1.2), vec3(1.2, 0.95, 0.85), cMix);
+  float cycleVal = mod(cNoise * 2.0 + cBand * 0.8 + gameTime * 0.5, 3.0);
+  vec3 tintG = vec3(0.55, 1.4, 0.55);
+  vec3 tintB = vec3(0.5, 0.75, 1.5);
+  vec3 tintR = vec3(1.5, 0.6, 0.55);
+  vec3 tintL = cycleVal < 1.0 ? mix(tintG, tintB, cycleVal)
+             : cycleVal < 2.0 ? mix(tintB, tintR, cycleVal - 1.0)
+             : mix(tintR, tintG, cycleVal - 2.0);
+  vec3 tintD = mix(vec3(1.0), tintL, 0.35);
   vec3 tunnelCol = mix(palDark * tintD, palLight * tintL, ring);
+  vec3 fFlow = vec3(gameTime * 0.05, gameTime * 0.04, gameTime * 0.07);
+  float fBase = Voronesque(p * 1.0 + fFlow);
+  vec3 warped = p + vec3(fBase * 1.3, fBase * 1.3, fBase * 0.6);
+  float fMid = Voronesque(warped * 2.4 + fFlow * 1.4);
+  float fHigh = Voronesque(warped * 6.5 + fFlow * 2.0);
+  float fractal = fMid * 0.6 + fHigh * 0.4;
+  float hole = smoothstep(0.55, 0.72, fractal);
+  float glowRing = smoothstep(0.4, 0.55, fractal) * (1.0 - hole);
+  tunnelCol *= 1.0 - hole * 0.7;
+  tunnelCol += palLight * tintL * glowRing * 1.3;
   float qShift = 0.5 + 0.5 * sin(p.z * 0.3 + gameTime * 0.6);
   vec3 obsCol    = mix(vec3(0.18, 0.85, 0.72), vec3(0.28, 0.95, 0.85), qShift);
   vec3 playerCol = vec3(1.0, 0.92, 0.7);
