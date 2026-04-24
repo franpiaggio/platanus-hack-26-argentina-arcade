@@ -320,15 +320,6 @@ void main(){
   float glowPuls = 0.85 + 0.15 * sin(gameTime * 3.2);
   col += vec3(0.8, 0.5, 1.0) * glow * glowPuls * 0.32;
 
-  vec2 hDir = uv - uvPlayer;
-  float ang = atan(hDir.y, hDir.x);
-  float rayHalo = 0.5 + 0.5 * sin(ang * 7.0 + gameTime * 2.0);
-  rayHalo *= 0.5 + 0.5 * sin(ang * 3.0 - gameTime * 1.2);
-  rayHalo = pow(max(rayHalo, 0.0), 2.0);
-  float rayFall = exp(-max(minPD, 0.0) * 3.2);
-  float haloFade = 1.0 - smoothstep(0.05, 0.35, splitAmt);
-  float haloFlat = 1.0 - smoothstep(0.05, 0.35, flatAmt);
-  col += vec3(1.0, 0.85, 0.55) * rayHalo * rayFall * 0.45 * haloFade * haloFlat;
 
   gl_FragColor = vec4(col, 1.0);
 }
