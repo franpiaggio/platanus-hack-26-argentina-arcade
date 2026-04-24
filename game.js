@@ -37,6 +37,17 @@ vec3 playerAt(float z){
   return vec3(path(z).x + playerLane * 1.2, path(z).y, z);
 }
 
+float smin(float a, float b, float k){
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+float tunnelDist(vec3 q){
+  float bump = cos(q.x * 1.3) * cos(q.y * 1.3) * 0.2
+             + cos(q.z * 1.5 + gameTime * 1.3) * cos(q.x * 2.4) * cos(q.y * 2.4) * 0.08;
+  return 3.0 - length(q.xy) + bump;
+}
+
 float isColumnRow(float n){
   return step(mod(mod(n * 17.0, 23.0) + mod(n * 29.0, 13.0), 5.0), 0.5);
 }
@@ -45,31 +56,42 @@ float obsDist(vec3 q){
   float rowIdx = floor((q.z + 2.5) / 15.0);
   float rz = mod(q.z + 2.5, 15.0) - 7.5;
   float freeLane = freeLaneOf(rowIdx);
-  float qy = q.y * (1.0 - isColumnRow(rowIdx));
-  float l0 = length(vec3(q.x + 1.2, qy, rz));
-  float l1 = length(vec3(q.x,       qy, rz));
-  float l2 = length(vec3(q.x - 1.2, qy, rz));
+  float isCol = isColumnRow(rowIdx);
+  float isSph = 1.0 - isCol;
+  float t = gameTime;
+  float b = rowIdx * 0.91;
+  float qy = q.y * isSph;
+  float wx0 = sin(t * 2.7 + b) * 0.25 * isSph;
+  float wy0 = cos(t * 2.1 + b * 1.3) * 0.15 * isSph;
+  float wx1 = sin(t * 1.9 + b + 2.1) * 0.25 * isSph;
+  float wy1 = cos(t * 2.3 + b * 1.7 + 1.5) * 0.15 * isSph;
+  float wx2 = sin(t * 2.5 + b + 4.3) * 0.25 * isSph;
+  float wy2 = cos(t * 1.7 + b * 1.1 + 3.2) * 0.15 * isSph;
+  float l0 = length(vec3(q.x + 1.2 - wx0, qy - wy0, rz));
+  float l1 = length(vec3(q.x       - wx1, qy - wy1, rz));
+  float l2 = length(vec3(q.x - 1.2 - wx2, qy - wy2, rz));
   if (freeLane < 0.5) l0 = 100.0;
   else if (freeLane < 1.5) l1 = 100.0;
   else l2 = 100.0;
-  return min(l0, min(l1, l2)) - 0.5;
+  float k = 0.35 * isSph + 0.001;
+  float merged = smin(l0, smin(l1, l2, k), k);
+  float d = merged - 0.5;
+  d -= cos(q.x * 3.0) * cos(qy * 3.0) * cos(rz * 3.0) * 0.04 * isSph;
+  return d;
 }
 
 float mapNoPlayer(vec3 p){
   vec3 q = p;
   q.xy -= path(q.z);
-  float tunnel = 3.0 - length(q.xy);
-  return min(tunnel, obsDist(q));
+  return smin(tunnelDist(q), obsDist(q), 0.3);
 }
 
 float map(vec3 p){
   vec3 q = p;
   q.xy -= path(q.z);
-  float tunnel = 3.0 - length(q.xy);
-  float obs = obsDist(q);
   float pz = playerZAt(gameTime);
   float player = length(p - playerAt(pz)) - 0.2;
-  return min(tunnel, min(obs, player));
+  return min(smin(tunnelDist(q), obsDist(q), 0.3), player);
 }
 
 vec3 calcNormal(vec3 p){
@@ -112,13 +134,13 @@ void main(){
   for (int i = 0; i < 128; i++) {
     float d = map(ro + rd * t);
     if (d < 0.01) { hit = 1.0; break; }
-    t += d * 0.95;
+    t += d * 0.8;
     if (t > 120.0) break;
   }
 
   vec3 p = ro + rd * t;
   vec3 q = p; q.xy -= path(q.z);
-  float tunnelD = 3.0 - length(q.xy);
+  float tunnelD = tunnelDist(q);
   float playerD = length(p - playerAt(tt)) - 0.2;
 
   float isPlayer = step(playerD, 0.05) * hit;
