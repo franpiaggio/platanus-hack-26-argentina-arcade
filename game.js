@@ -90,7 +90,7 @@ float rowKind(float i){
   if (he > 3.5) k = 4.0;
   float nd = mod(i + seed * 13.0, 128.0);
   float hd = mod(mod(nd * 47.0, 19.0) + mod(nd * 53.0, 13.0), 10.0);
-  if (i >= 40.0 && hd > 8.5) k = 5.0;
+  if (i >= 90.0 && hd > 8.5) k = 5.0;
   return k;
 }
 
@@ -409,7 +409,7 @@ function update(_t, delta) {
       if (he >= 4) k = 4;
       const nd = (((rowIdx + this.seed * 13) % 128) + 128) % 128;
       const hd = ((nd * 47) % 19 + (nd * 53) % 13) % 10;
-      if (rowIdx >= 40 && hd >= 9) k = 5;
+      if (rowIdx >= 90 && hd >= 9) k = 5;
       let hit = false;
       if (k === 5) {
         hit = this.splitAmount < 0.85 || this.flatAmount < 0.85;
