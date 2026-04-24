@@ -37,7 +37,17 @@ float playerZAt(float t){
 }
 
 vec2 path(float z){
-  return vec2(sin(z*0.15)*2.0, cos(z*0.1)*1.5);
+  float on = smoothstep(4.5, 5.5, gameTime);
+  float x = sin(z * 0.15) * 2.0 * on;
+  float yBase = cos(z * 0.1) * 1.5 * on;
+  float tb = gameTime - 30.0;
+  float bi = floor(max(tb, 0.0) / 30.0);
+  float phase = mod(max(tb, 0.0), 30.0);
+  float yEnv = smoothstep(0.0, 1.0, phase) * (1.0 - smoothstep(4.0, 5.0, phase));
+  float burst = step(0.0, tb) * yEnv;
+  float dir = mod(bi, 2.0) < 0.5 ? 1.0 : -1.0;
+  float y = mix(yBase, dir * 2.5, burst);
+  return vec2(x, y);
 }
 
 vec3 playerAt(float z){
@@ -78,6 +88,9 @@ float rowKind(float i){
   float ne = mod(i + seed * 11.0, 128.0);
   float he = mod(mod(ne * 41.0, 17.0) + mod(ne * 43.0, 11.0), 10.0);
   if (he > 3.5) k = 4.0;
+  float nd = mod(i + seed * 13.0, 128.0);
+  float hd = mod(mod(nd * 47.0, 19.0) + mod(nd * 53.0, 13.0), 10.0);
+  if (i >= 40.0 && hd > 8.5) k = 5.0;
   return k;
 }
 
@@ -85,6 +98,12 @@ float obsDist(vec3 q){
   float rowIdx = floor((q.z + 2.5) / 15.0);
   float rz = mod(q.z + 2.5, 15.0) - 7.5;
   float kind = rowKind(rowIdx);
+  if (kind > 4.5) {
+    float slab = abs(rz) - 0.2;
+    float sU = abs(q.y - 0.55) - 0.15;
+    float sD = abs(q.y + 0.55) - 0.15;
+    return max(slab, -min(sU, sD));
+  }
   if (kind > 3.5) return 100.0;
   if (kind > 2.5) {
     float slab = abs(rz) - 0.2;
@@ -388,8 +407,13 @@ function update(_t, delta) {
       const ne = (((rowIdx + this.seed * 11) % 128) + 128) % 128;
       const he = ((ne * 41) % 17 + (ne * 43) % 11) % 10;
       if (he >= 4) k = 4;
+      const nd = (((rowIdx + this.seed * 13) % 128) + 128) % 128;
+      const hd = ((nd * 47) % 19 + (nd * 53) % 13) % 10;
+      if (rowIdx >= 40 && hd >= 9) k = 5;
       let hit = false;
-      if (k === 4) {
+      if (k === 5) {
+        hit = this.splitAmount < 0.85 || this.flatAmount < 0.85;
+      } else if (k === 4) {
         hit = false;
       } else if (k === 3) {
         hit = this.flatAmount < 0.9;
