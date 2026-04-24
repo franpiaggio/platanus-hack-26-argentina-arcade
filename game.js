@@ -17,7 +17,7 @@ const CABINET_KEYS = {
 const FRAG = `
 precision mediump float;
 uniform vec2 resolution;
-uniform float time;
+uniform float gameTime;
 uniform float playerLane;
 
 vec2 path(float z){
@@ -33,14 +33,19 @@ float map(vec3 p){
   q.xy -= path(q.z);
   float tunnel = 3.0 - length(q.xy);
 
-  float rz = mod(q.z + 12.5, 15.0) - 7.5;
+  float rowIdx = floor((q.z + 2.5) / 15.0);
+  float rz = mod(q.z + 2.5, 15.0) - 7.5;
+  float freeLane = floor(fract(sin(rowIdx * 12.9898) * 43758.5453) * 3.0);
   float r = 0.55;
-  float s0 = length(vec3(q.x + 1.2, q.y, rz)) - r;
-  float s1 = length(vec3(q.x,       q.y, rz)) - r;
-  float s2 = length(vec3(q.x - 1.2, q.y, rz)) - r;
-  float obs = min(s0, min(s1, s2));
+  vec3 c0 = vec3(q.x + 1.2, q.y, rz);
+  vec3 c1 = vec3(q.x,       q.y, rz);
+  vec3 c2 = vec3(q.x - 1.2, q.y, rz);
+  if (freeLane < 0.5) c0.y += 100.0;
+  else if (freeLane < 1.5) c1.y += 100.0;
+  else c2.y += 100.0;
+  float obs = min(length(c0), min(length(c1), length(c2))) - r;
 
-  float pz = time * 4.0 + 10.0;
+  float pz = gameTime * 4.0 + 10.0;
   float player = length(p - playerAt(pz)) - 0.4;
 
   return min(tunnel, min(obs, player));
@@ -49,7 +54,7 @@ float map(vec3 p){
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5 * resolution.xy) / resolution.y;
 
-  float tt = time * 4.0 + 10.0;
+  float tt = gameTime * 4.0 + 10.0;
   float cz = tt - 3.0;
   vec3 ro = vec3(path(cz), cz);
   vec3 ta = vec3(path(tt + 5.0), tt + 5.0);
@@ -110,6 +115,7 @@ function create() {
   const uniforms = {
     resolution: { type: '2f', value: { x: 0, y: 0 } },
     time: { type: '1f', value: 0 },
+    gameTime: { type: '1f', value: 0 },
     playerLane: { type: '1f', value: 0 },
   };
   const baseShader = new Phaser.Display.BaseShader('bg', FRAG, undefined, uniforms);
@@ -118,14 +124,68 @@ function create() {
   this.keys = this.input.keyboard.addKeys({
     L: CABINET_KEYS.P1_L[0],
     R: CABINET_KEYS.P1_R[0],
+    S: CABINET_KEYS.START1[0],
   });
   this.lane = 0;
   this.smoothLane = 0;
+  this.gameTime = 0;
+  this.state = 'menu';
+  showOverlay(this, 'TUNNEL RUNNER', 'PRESS START', '#7acfff');
 }
 
-function update() {
-  if (Phaser.Input.Keyboard.JustDown(this.keys.L)) this.lane = Math.max(-1, this.lane - 1);
-  if (Phaser.Input.Keyboard.JustDown(this.keys.R)) this.lane = Math.min(1, this.lane + 1);
-  this.smoothLane += (this.lane - this.smoothLane) * 0.2;
+function showOverlay(scene, title, hint, color) {
+  scene.title = scene.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 50, title, {
+    fontFamily: 'monospace', fontSize: '48px', color, fontStyle: 'bold',
+  }).setOrigin(0.5);
+  scene.hint = scene.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 30, hint, {
+    fontFamily: 'monospace', fontSize: '22px', color: '#fff',
+  }).setOrigin(0.5);
+  scene.tweens.add({ targets: scene.hint, alpha: 0.3, duration: 600, yoyo: true, repeat: -1 });
+}
+
+function hideOverlay(scene) {
+  scene.title.destroy();
+  scene.hint.destroy();
+}
+
+function update(_t, delta) {
+  if (this.state === 'menu') {
+    if (Phaser.Input.Keyboard.JustDown(this.keys.S)) {
+      hideOverlay(this);
+      this.state = 'playing';
+    }
+  } else if (this.state === 'playing') {
+    this.gameTime += delta * 0.001;
+    if (Phaser.Input.Keyboard.JustDown(this.keys.L)) this.lane = Math.max(-1, this.lane - 1);
+    if (Phaser.Input.Keyboard.JustDown(this.keys.R)) this.lane = Math.min(1, this.lane + 1);
+    this.smoothLane += (this.lane - this.smoothLane) * 0.2;
+
+    const pz = this.gameTime * 4.0 + 10.0;
+    const rowIdx = Math.floor((pz + 2.5) / 15);
+    const dz = pz - (15 * rowIdx + 5);
+    if (Math.abs(dz) < 0.95) {
+      const h = Math.sin(rowIdx * 12.9898) * 43758.5453;
+      const freeLane = Math.floor(3 * (h - Math.floor(h)));
+      const plx = this.smoothLane * 1.2;
+      for (let k = 0; k < 3; k++) {
+        if (k === freeLane) continue;
+        const dx = plx - (k - 1) * 1.2;
+        if (dx * dx + 0.64 + dz * dz < 0.9025) {
+          this.state = 'gameover';
+          showOverlay(this, 'GAME OVER', 'PRESS START', '#ff6666');
+          break;
+        }
+      }
+    }
+  } else {
+    if (Phaser.Input.Keyboard.JustDown(this.keys.S)) {
+      hideOverlay(this);
+      this.gameTime = 0;
+      this.lane = 0;
+      this.smoothLane = 0;
+      this.state = 'playing';
+    }
+  }
+  this.shader.setUniform('gameTime.value', this.gameTime);
   this.shader.setUniform('playerLane.value', this.smoothLane);
 }
