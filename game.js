@@ -96,7 +96,7 @@ float rowKind(float i){
   if (i < 23.0 && k > 2.5) k = 0.0;
   float ne = mod(i + seed * 11.0, 128.0);
   float he = mod(mod(ne * 41.0, 17.0) + mod(ne * 43.0, 11.0), 10.0);
-  float emptyStep = step(60.0, gameTime) + step(100.0, gameTime);
+  float emptyStep = step(54.0, i) + step(105.0, i);
   if (he > 3.5 + emptyStep) k = 4.0;
   float nd = mod(i + seed * 13.0, 128.0);
   float hd = mod(mod(nd * 47.0, 19.0) + mod(nd * 53.0, 13.0), 10.0);
@@ -388,6 +388,216 @@ new Phaser.Game(config);
 const STORAGE_KEY = 'tunnel-runner-scores';
 const MAX_SCORES = 10;
 
+const DRONE_POOLS = [
+  [98.00, 116.54, 130.81, 146.83, 174.61],
+  [65.41, 77.78, 87.31, 98.00, 116.54],
+  [92.50, 110.00, 123.47, 138.59, 164.81],
+  [65.41, 77.78, 87.31, 98.00, 116.54],
+];
+const DRONE_SEQ = [0, 2, 1, 4];
+const DRONE_HOLD = 10;
+
+function droneRootHz(t) {
+  const step = Math.floor(Math.max(t, 0) / DRONE_HOLD);
+  return DRONE_POOLS[0][DRONE_SEQ[step % DRONE_SEQ.length]];
+}
+
+function initAudio(scene) {
+  const ctx = scene.sound && scene.sound.context;
+  if (!ctx || !ctx.createGain) return;
+  const master = ctx.createGain();
+  master.gain.value = 0;
+  master.connect(ctx.destination);
+
+  const lfo = ctx.createOscillator();
+  const lfoGain = ctx.createGain();
+  lfo.frequency.value = 0.09;
+  lfoGain.gain.value = 0.05;
+  lfo.connect(lfoGain);
+  lfoGain.connect(master.gain);
+  lfo.start();
+
+  const root0 = droneRootHz(0);
+  const voices = [[1.0, 0, 0.5], [1.5, -5, 0.3], [2.0, 4, 0.15], [3.0, 0, 0.06]].map((v) => {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.detune.value = v[1];
+    o.frequency.value = root0 * v[0];
+    g.gain.value = v[2];
+    o.connect(g);
+    g.connect(master);
+    o.start();
+    return { o: o, ratio: v[0] };
+  });
+
+  const fxBus = ctx.createGain();
+  fxBus.gain.value = 0.35;
+  fxBus.connect(ctx.destination);
+
+  const noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+
+  scene.audio = { ctx: ctx, master: master, voices: voices, fxBus: fxBus, noiseBuf: noiseBuf, lastGain: -1, lastRoot: root0 };
+}
+
+function currentPool(t) {
+  const phase = ((Math.floor(Math.max(t, 0) / 40) % 4) + 4) % 4;
+  return DRONE_POOLS[phase];
+}
+
+function playMoveFx(scene, dir) {
+  const a = scene.audio;
+  if (!a || !a.fxBus || !a.noiseBuf) return;
+  const ctx = a.ctx;
+  const now = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = a.noiseBuf;
+  src.loop = true;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.Q.value = 2.5;
+  const fStart = dir > 0 ? 500 : 1400;
+  const fEnd = dir > 0 ? 1400 : 500;
+  filter.frequency.setValueAtTime(fStart, now);
+  filter.frequency.exponentialRampToValueAtTime(fEnd, now + 0.14);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.25, now + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+  src.connect(filter);
+  filter.connect(g);
+  g.connect(a.fxBus);
+  src.start(now);
+  src.stop(now + 0.22);
+}
+
+function playHiHat(scene, accent) {
+  const a = scene.audio;
+  if (!a || !a.fxBus || !a.noiseBuf) return;
+  const ctx = a.ctx;
+  const now = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = a.noiseBuf;
+  src.loop = true;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = 6500;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.05 * accent, now + 0.003);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+  src.connect(filter);
+  filter.connect(g);
+  g.connect(a.fxBus);
+  src.start(now);
+  src.stop(now + 0.08);
+}
+
+function playFlatFx(scene) {
+  const a = scene.audio;
+  if (!a || !a.fxBus || !a.noiseBuf) return;
+  const ctx = a.ctx;
+  const now = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = a.noiseBuf;
+  src.loop = true;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.Q.value = 3;
+  filter.frequency.setValueAtTime(2200, now);
+  filter.frequency.exponentialRampToValueAtTime(400, now + 0.13);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.25, now + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+  src.connect(filter);
+  filter.connect(g);
+  g.connect(a.fxBus);
+  src.start(now);
+  src.stop(now + 0.22);
+}
+
+function playSplitFx(scene) {
+  const a = scene.audio;
+  if (!a || !a.fxBus || !a.noiseBuf) return;
+  const ctx = a.ctx;
+  const now = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = a.noiseBuf;
+  src.loop = true;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.Q.value = 2;
+  filter.frequency.setValueAtTime(1400, now);
+  filter.frequency.exponentialRampToValueAtTime(200, now + 0.14);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.35, now + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+  src.connect(filter);
+  filter.connect(g);
+  g.connect(a.fxBus);
+  src.start(now);
+  src.stop(now + 0.25);
+}
+
+function playKick(scene) {
+  if (!scene.audio || !scene.audio.fxBus) return;
+  const ctx = scene.audio.ctx;
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = 'sine';
+  o.connect(g);
+  g.connect(scene.audio.fxBus);
+  const now = ctx.currentTime;
+  o.frequency.setValueAtTime(150, now);
+  o.frequency.exponentialRampToValueAtTime(40, now + 0.05);
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.45, now + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+  o.start(now);
+  o.stop(now + 0.3);
+}
+
+function rowKindOf(seed, i) {
+  const nk = (((i + seed * 7) % 128) + 128) % 128;
+  const hh = ((nk * 23) % 31 + (nk * 37) % 11) % 10;
+  let k = (hh >= 5 ? 1 : 0) + (hh >= 7 ? 1 : 0) + (hh >= 9 ? 1 : 0);
+  if (i < 11 && k > 1) k = hh % 2;
+  if (i < 23 && k > 2) k = 0;
+  const ne = (((i + seed * 11) % 128) + 128) % 128;
+  const he = ((ne * 41) % 17 + (ne * 43) % 11) % 10;
+  const emptyStep = (i >= 54 ? 1 : 0) + (i >= 105 ? 1 : 0);
+  if (he >= 4 + emptyStep) k = 4;
+  const nd = (((i + seed * 13) % 128) + 128) % 128;
+  const hd = ((nd * 47) % 19 + (nd * 53) % 13) % 10;
+  if (i >= 90 && hd >= 9) k = 5;
+  return k;
+}
+
+function updateDrone(scene) {
+  const a = scene.audio;
+  if (!a) return;
+  const now = a.ctx.currentTime;
+  const root = droneRootHz(scene.gameTime);
+  if (root !== a.lastRoot) {
+    for (let i = 0; i < a.voices.length; i++) {
+      const f = a.voices[i].o.frequency;
+      f.cancelScheduledValues(now);
+      f.setValueAtTime(f.value, now);
+      f.linearRampToValueAtTime(root * a.voices[i].ratio, now + 0.03);
+    }
+    a.lastRoot = root;
+  }
+  const target = scene.state === 'playing' ? 0.085 : scene.state === 'menu' || scene.state === 'controls' ? 0.04 : 0.025;
+  if (a.lastGain !== target) {
+    a.master.gain.setTargetAtTime(target, now, 0.6);
+    a.lastGain = target;
+  }
+}
+
 function create() {
   const uniforms = {
     resolution: { type: '2f', value: { x: 0, y: 0 } },
@@ -416,6 +626,7 @@ function create() {
   this.gameTime = 0;
   this.splitAmount = 0;
   this.flatAmount = 0;
+  this.lastBeatIdx = -1;
   this.seed = Math.floor(Math.random() * 128);
   this.state = 'menu';
   this.menuIndex = 0;
@@ -430,6 +641,8 @@ function create() {
     get: (k) => Promise.resolve(((v) => v == null ? { found: false, value: null } : { found: true, value: JSON.parse(v) })(localStorage.getItem(k))),
     set: (k, v) => { localStorage.setItem(k, JSON.stringify(v)); return Promise.resolve(); },
   };
+  initAudio(this);
+
   this.store.get(STORAGE_KEY).then((r) => {
     if (r && r.found && Array.isArray(r.value)) {
       this.scores = r.value
@@ -499,7 +712,17 @@ function showControls(scene) {
 
 function showNameEntry(scene) {
   clearOverlay(scene);
-  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 140, 'GAME OVER', 48, '#ff6666', true);
+  const top = scene.scores.length ? scene.scores[0].score : 0;
+  const isNewRecord = scene.finalScore > top;
+  if (isNewRecord) {
+    const trophy = scene.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 205, '🏆', {
+      fontFamily: 'serif', fontSize: '68px',
+    }).setOrigin(0.5);
+    (scene.overlay || (scene.overlay = [])).push(trophy);
+    pulse(scene, addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 140, 'NEW RECORD', 38, '#ffd700', true));
+  } else {
+    addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 140, 'GAME OVER', 48, '#ff6666', true);
+  }
   addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80, 'TIME: ' + Math.floor(scene.finalScore), 24, '#fff');
   scene.nameSlots = [];
   for (let i = 0; i < 4; i++) {
@@ -568,8 +791,22 @@ function update(_t, delta) {
     }
   } else if (this.state === 'playing') {
     this.gameTime += delta * 0.001;
-    if (JD(k.L)) this.lane = Math.max(-1, this.lane - 1);
-    if (JD(k.R)) this.lane = Math.min(1, this.lane + 1);
+    const bi = Math.floor(this.gameTime / 0.125);
+    if (bi !== this.lastBeatIdx) {
+      this.lastBeatIdx = bi;
+      if (bi % 4 === 0) playKick(this);
+      if (this.gameTime >= 30 && bi % 4 === 2) playHiHat(this, 1);
+    }
+    if (JD(k.L)) {
+      this.lane = Math.max(-1, this.lane - 1);
+      playMoveFx(this, -1);
+    }
+    if (JD(k.R)) {
+      this.lane = Math.min(1, this.lane + 1);
+      playMoveFx(this, 1);
+    }
+    if (JD(k.A1)) playSplitFx(this);
+    if (JD(k.A2)) playFlatFx(this);
     this.splitAmount += ((k.A1.isDown ? 1 : 0) - this.splitAmount) * 0.07;
     this.flatAmount += ((k.A2.isDown ? 1 : 0) - this.flatAmount) * 0.07;
     this.smoothLane += (this.lane - this.smoothLane) * 0.2;
@@ -583,19 +820,8 @@ function update(_t, delta) {
     const rowIdx = Math.floor((pz + 2.5) / 15);
     const dz = pz - (15 * rowIdx + 5);
     if (Math.abs(dz) < 0.95) {
-      const nk = (((rowIdx + this.seed * 7) % 128) + 128) % 128;
-      const hh = ((nk * 23) % 31 + (nk * 37) % 11) % 10;
       const n = (((rowIdx + this.seed) % 128) + 128) % 128;
-      let k = (hh >= 5 ? 1 : 0) + (hh >= 7 ? 1 : 0) + (hh >= 9 ? 1 : 0);
-      if (rowIdx < 11 && k > 1) k = hh % 2;
-      if (rowIdx < 23 && k > 2) k = 0;
-      const ne = (((rowIdx + this.seed * 11) % 128) + 128) % 128;
-      const he = ((ne * 41) % 17 + (ne * 43) % 11) % 10;
-      const emptyStep = (t >= 60 ? 1 : 0) + (t >= 100 ? 1 : 0);
-      if (he >= 4 + emptyStep) k = 4;
-      const nd = (((rowIdx + this.seed * 13) % 128) + 128) % 128;
-      const hd = ((nd * 47) % 19 + (nd * 53) % 13) % 10;
-      if (rowIdx >= 90 && hd >= 9) k = 5;
+      const k = rowKindOf(this.seed, rowIdx);
       const effSplit = this.keys.A1.isDown ? 1 : this.splitAmount;
       const effFlat = this.keys.A2.isDown ? 1 : this.flatAmount;
       let hit = false;
@@ -657,12 +883,15 @@ function update(_t, delta) {
       this.smoothLane = 0;
       this.splitAmount = 0;
       this.flatAmount = 0;
+      this.lastBeatIdx = -1;
       this.seed = Math.floor(Math.random() * 128);
       this.menuIndex = 0;
       this.state = 'menu';
       showMenu(this);
     }
   }
+
+  updateDrone(this);
 
   this.timer.setVisible(this.state === 'playing');
   this.timer.setText(Math.floor(this.gameTime));
