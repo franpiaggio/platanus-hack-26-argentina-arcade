@@ -20,6 +20,7 @@ uniform vec2 resolution;
 uniform float gameTime;
 uniform float playerLane;
 uniform float splitAmt;
+uniform float flatAmt;
 
 float freeLaneOf(float i){
   float n = mod(i, 128.0);
@@ -43,11 +44,18 @@ float smin(float a, float b, float k){
   return mix(b, a, h) - k * h * (1.0 - h);
 }
 
+float sdEllipsoid(vec3 p, vec3 r){
+  float k0 = length(p / r);
+  float k1 = length(p / (r * r));
+  return k0 * (k0 - 1.0) / k1;
+}
+
 float playerSDF(vec3 p, vec3 c){
   vec3 off = vec3(0.0, splitAmt * 0.6, 0.0);
-  float pa = length(p - c - off) - 0.2;
-  float pb = length(p - c + off) - 0.2;
-  return smin(pa, pb, 0.85);
+  vec3 r = vec3(0.2 + flatAmt * 0.05, 0.2 - flatAmt * 0.13, 0.2 + flatAmt * 0.05);
+  float pa = sdEllipsoid(p - c - off, r);
+  float pb = sdEllipsoid(p - c + off, r);
+  return smin(pa, pb, max(splitAmt * 0.85, 0.001));
 }
 
 float tunnelDist(vec3 q){
@@ -59,13 +67,18 @@ float tunnelDist(vec3 q){
 float rowKind(float i){
   float n = mod(i, 128.0);
   float h = mod(mod(n * 23.0, 31.0) + mod(n * 37.0, 11.0), 10.0);
-  return step(6.0, h) + step(8.0, h);
+  return step(5.0, h) + step(7.0, h) + step(9.0, h);
 }
 
 float obsDist(vec3 q){
   float rowIdx = floor((q.z + 2.5) / 15.0);
   float rz = mod(q.z + 2.5, 15.0) - 7.5;
   float kind = rowKind(rowIdx);
+  if (kind > 2.5) {
+    float slab = abs(rz) - 0.2;
+    float slit = abs(q.y) - 0.12;
+    return max(slab, -slit);
+  }
   if (kind > 1.5) {
     return length(vec2(q.y, rz)) - 0.4;
   }
@@ -221,6 +234,7 @@ function create() {
     gameTime: { type: '1f', value: 0 },
     playerLane: { type: '1f', value: 0 },
     splitAmt: { type: '1f', value: 0 },
+    flatAmt: { type: '1f', value: 0 },
   };
   const baseShader = new Phaser.Display.BaseShader('bg', FRAG, undefined, uniforms);
   this.shader = this.add.shader(baseShader, GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT);
@@ -239,6 +253,7 @@ function create() {
   this.smoothLane = 0;
   this.gameTime = 0;
   this.splitAmount = 0;
+  this.flatAmount = 0;
   this.state = 'menu';
   this.initials = [0, 0, 0, 0];
   this.slot = 0;
@@ -337,8 +352,8 @@ function update(_t, delta) {
     this.gameTime += delta * 0.001;
     if (JD(k.L)) this.lane = Math.max(-1, this.lane - 1);
     if (JD(k.R)) this.lane = Math.min(1, this.lane + 1);
-    const held = k.A1.isDown || k.A2.isDown || k.A3.isDown;
-    this.splitAmount += ((held ? 1 : 0) - this.splitAmount) * 0.07;
+    this.splitAmount += ((k.A1.isDown ? 1 : 0) - this.splitAmount) * 0.07;
+    this.flatAmount += ((k.A2.isDown ? 1 : 0) - this.flatAmount) * 0.07;
     this.smoothLane += (this.lane - this.smoothLane) * 0.2;
 
     const t = this.gameTime;
@@ -349,7 +364,9 @@ function update(_t, delta) {
       const n = ((rowIdx % 128) + 128) % 128;
       const h = ((n * 23) % 31 + (n * 37) % 11) % 10;
       let hit = false;
-      if (h >= 8) {
+      if (h >= 9) {
+        hit = this.flatAmount < 0.9;
+      } else if (h >= 7) {
         hit = this.splitAmount < 0.9;
       } else {
         const freeLane = (((n * 11) % 7) + ((n * 13) % 5)) % 3;
@@ -397,6 +414,7 @@ function update(_t, delta) {
       this.lane = 0;
       this.smoothLane = 0;
       this.splitAmount = 0;
+      this.flatAmount = 0;
       this.state = 'menu';
       showMenu(this);
     }
@@ -406,4 +424,5 @@ function update(_t, delta) {
   this.shader.setUniform('gameTime.value', this.gameTime);
   this.shader.setUniform('playerLane.value', this.smoothLane);
   this.shader.setUniform('splitAmt.value', this.splitAmount);
+  this.shader.setUniform('flatAmt.value', this.flatAmount);
 }
