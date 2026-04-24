@@ -269,7 +269,9 @@ void main(){
   } else {
     dA = rD; lA = rL; dB = bD; lB = bL;
   }
-  vec3 tunnelCol = mix(mix(dA, dB, palT), mix(lA, lB, palT), ring);
+  vec3 palDark = mix(dA, dB, palT);
+  vec3 palLight = mix(lA, lB, palT);
+  vec3 tunnelCol = mix(palDark, palLight, ring);
   float qShift = 0.5 + 0.5 * sin(p.z * 0.3 + gameTime * 0.6);
   vec3 obsCol    = mix(vec3(0.18, 0.85, 0.72), vec3(0.28, 0.95, 0.85), qShift);
   vec3 playerCol = vec3(1.0, 0.92, 0.7);
@@ -332,6 +334,11 @@ void main(){
 
   float fog = 1.0 / (1.0 + t * t * 0.002);
   col *= fog;
+
+  float focusD = 10.0;
+  float defocus = smoothstep(3.0, 28.0, abs(t - focusD));
+  vec3 hazeCol = palDark * 1.6 + palLight * 0.25;
+  col = mix(col, hazeCol, defocus * 0.45 * (1.0 - isPlayer));
 
   float glow = exp(-max(minPD, 0.0) * 8.5);
   float glowPuls = 0.85 + 0.15 * sin(gameTime * 3.2);
