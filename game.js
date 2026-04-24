@@ -21,9 +21,10 @@ uniform float gameTime;
 uniform float playerLane;
 uniform float splitAmt;
 uniform float flatAmt;
+uniform float seed;
 
 float freeLaneOf(float i){
-  float n = mod(i, 128.0);
+  float n = mod(i + seed, 128.0);
   return mod(mod(n * 11.0, 7.0) + mod(n * 13.0, 5.0), 3.0);
 }
 
@@ -65,7 +66,7 @@ float tunnelDist(vec3 q){
 }
 
 float rowKind(float i){
-  float n = mod(i, 128.0);
+  float n = mod(i + seed * 7.0, 128.0);
   float h = mod(mod(n * 23.0, 31.0) + mod(n * 37.0, 11.0), 10.0);
   return step(5.0, h) + step(7.0, h) + step(9.0, h);
 }
@@ -235,6 +236,7 @@ function create() {
     playerLane: { type: '1f', value: 0 },
     splitAmt: { type: '1f', value: 0 },
     flatAmt: { type: '1f', value: 0 },
+    seed: { type: '1f', value: 0 },
   };
   const baseShader = new Phaser.Display.BaseShader('bg', FRAG, undefined, uniforms);
   this.shader = this.add.shader(baseShader, GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT);
@@ -254,6 +256,7 @@ function create() {
   this.gameTime = 0;
   this.splitAmount = 0;
   this.flatAmount = 0;
+  this.seed = Math.floor(Math.random() * 128);
   this.state = 'menu';
   this.initials = [0, 0, 0, 0];
   this.slot = 0;
@@ -361,8 +364,9 @@ function update(_t, delta) {
     const rowIdx = Math.floor((pz + 2.5) / 15);
     const dz = pz - (15 * rowIdx + 5);
     if (Math.abs(dz) < 0.95) {
-      const n = ((rowIdx % 128) + 128) % 128;
-      const h = ((n * 23) % 31 + (n * 37) % 11) % 10;
+      const nk = (((rowIdx + this.seed * 7) % 128) + 128) % 128;
+      const h = ((nk * 23) % 31 + (nk * 37) % 11) % 10;
+      const n = (((rowIdx + this.seed) % 128) + 128) % 128;
       let hit = false;
       if (h >= 9) {
         hit = this.flatAmount < 0.9;
@@ -415,6 +419,7 @@ function update(_t, delta) {
       this.smoothLane = 0;
       this.splitAmount = 0;
       this.flatAmount = 0;
+      this.seed = Math.floor(Math.random() * 128);
       this.state = 'menu';
       showMenu(this);
     }
@@ -425,4 +430,5 @@ function update(_t, delta) {
   this.shader.setUniform('playerLane.value', this.smoothLane);
   this.shader.setUniform('splitAmt.value', this.splitAmount);
   this.shader.setUniform('flatAmt.value', this.flatAmount);
+  this.shader.setUniform('seed.value', this.seed);
 }
