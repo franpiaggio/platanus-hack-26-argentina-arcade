@@ -1,5 +1,5 @@
 {
-  "game_name": "<FILL THIS>",
-  "description": "<FILL THIS>",
+  "game_name": "Quantum Tunnel",
+  "description": "Pilot a quantum particle through a collapsing tunnel. Split to pass horizontal bars, flatten to pass vertical slits, and combine both for double-slit walls.",
   "player_mode": "single_player"
 }

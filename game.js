@@ -384,6 +384,7 @@ function create() {
   this.flatAmount = 0;
   this.seed = Math.floor(Math.random() * 128);
   this.state = 'menu';
+  this.menuIndex = 0;
   this.initials = [0, 0, 0, 0];
   this.slot = 0;
   this.scores = [];
@@ -391,16 +392,18 @@ function create() {
     fontFamily: 'monospace', fontSize: '22px', color: '#fff',
   }).setOrigin(1, 0);
 
-  this.store = window.platanusArcadeStorage;
-  if (this.store) {
-    this.store.get(STORAGE_KEY).then((r) => {
-      if (r && r.found && Array.isArray(r.value)) {
-        this.scores = r.value
-          .filter((e) => e && typeof e.name === 'string' && typeof e.score === 'number')
-          .slice(0, MAX_SCORES);
-      }
-    });
-  }
+  this.store = window.platanusArcadeStorage || {
+    get: (k) => Promise.resolve(((v) => v == null ? { found: false, value: null } : { found: true, value: JSON.parse(v) })(localStorage.getItem(k))),
+    set: (k, v) => { localStorage.setItem(k, JSON.stringify(v)); return Promise.resolve(); },
+  };
+  this.store.get(STORAGE_KEY).then((r) => {
+    if (r && r.found && Array.isArray(r.value)) {
+      this.scores = r.value
+        .filter((e) => e && typeof e.name === 'string' && typeof e.score === 'number')
+        .slice(0, MAX_SCORES);
+    }
+    if (this.state === 'menu') showMenu(this);
+  });
 
   showMenu(this);
 }
@@ -425,8 +428,49 @@ function clearOverlay(scene) {
 
 function showMenu(scene) {
   clearOverlay(scene);
-  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 50, 'TUNNEL RUNNER', 48, '#7acfff', true);
-  pulse(scene, addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 30, 'PRESS START', 22, '#fff'));
+  addText(scene, GAME_WIDTH / 2, 68, 'PLATANUS HACK 26 · BUENOS AIRES', 13, '#7acfff', true);
+  addText(scene, GAME_WIDTH / 2, 138, 'QUANTUM TUNNEL', 52, '#b8ffea', true);
+  addText(scene, GAME_WIDTH / 2, 184, 'collapse the wavefunction · clear the path', 13, '#6ab4c5');
+
+  const items = ['PLAY', 'LEADERBOARD', 'CONTROLS'];
+  items.forEach((label, i) => {
+    const y = 258 + i * 52;
+    const sel = i === scene.menuIndex;
+    const g = scene.add.graphics();
+    g.fillStyle(sel ? 0xb8ffea : 0x12162a, sel ? 1.0 : 0.85);
+    g.lineStyle(2, sel ? 0xb8ffea : 0x3a4068, 1);
+    g.fillRoundedRect(GAME_WIDTH / 2 - 150, y - 20, 300, 40, 6);
+    g.strokeRoundedRect(GAME_WIDTH / 2 - 150, y - 20, 300, 40, 6);
+    (scene.overlay || (scene.overlay = [])).push(g);
+    addText(scene, GAME_WIDTH / 2, y, label, 22, sel ? '#0a0f1f' : '#fff', true);
+  });
+
+  addText(scene, GAME_WIDTH / 2, 448, 'TOP SCORES', 15, '#7acfff', true);
+  if (!scene.scores.length) {
+    addText(scene, GAME_WIDTH / 2, 478, 'NO SAVED SCORES YET', 14, '#666');
+  } else {
+    scene.scores.slice(0, 3).forEach((e, i) => {
+      addText(scene, GAME_WIDTH / 2, 478 + i * 20, (i + 1) + '.  ' + e.name + '   ' + Math.floor(e.score), 15, '#bbb');
+    });
+  }
+
+  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT - 24, 'JOYSTICK · START', 13, '#555');
+}
+
+function showControls(scene) {
+  clearOverlay(scene);
+  addText(scene, GAME_WIDTH / 2, 70, 'CONTROLS', 36, '#b8ffea', true);
+  const lines = [
+    'LEFT / RIGHT   —   change lane',
+    'BUTTON 1   —   split · pass horizontal bars',
+    'BUTTON 2   —   flatten · pass vertical slits',
+    'BUTTON 1 + 2   —   double-slit walls',
+    'START   —   menu · select',
+  ];
+  lines.forEach((l, i) => {
+    addText(scene, GAME_WIDTH / 2, 170 + i * 36, l, 16, '#fff');
+  });
+  pulse(scene, addText(scene, GAME_WIDTH / 2, GAME_HEIGHT - 40, 'PRESS START TO GO BACK', 16, '#fff'));
 }
 
 function showNameEntry(scene) {
@@ -473,9 +517,26 @@ function update(_t, delta) {
   const JD = Phaser.Input.Keyboard.JustDown;
 
   if (this.state === 'menu') {
+    let redraw = false;
+    if (JD(k.U)) { this.menuIndex = (this.menuIndex + 2) % 3; redraw = true; }
+    if (JD(k.D)) { this.menuIndex = (this.menuIndex + 1) % 3; redraw = true; }
+    if (redraw) showMenu(this);
     if (JD(k.S)) {
-      clearOverlay(this);
-      this.state = 'playing';
+      if (this.menuIndex === 0) {
+        clearOverlay(this);
+        this.state = 'playing';
+      } else if (this.menuIndex === 1) {
+        this.state = 'leaderboard';
+        showLeaderboard(this, -1);
+      } else {
+        this.state = 'controls';
+        showControls(this);
+      }
+    }
+  } else if (this.state === 'controls') {
+    if (JD(k.S)) {
+      this.state = 'menu';
+      showMenu(this);
     }
   } else if (this.state === 'playing') {
     this.gameTime += delta * 0.001;
@@ -552,7 +613,7 @@ function update(_t, delta) {
         .concat(entry)
         .sort((a, b) => b.score - a.score || (a.savedAt < b.savedAt ? 1 : -1))
         .slice(0, MAX_SCORES);
-      if (this.store) this.store.set(STORAGE_KEY, this.scores);
+      this.store.set(STORAGE_KEY, this.scores);
       const idx = this.scores.findIndex((e) => e.savedAt === entry.savedAt);
       this.state = 'leaderboard';
       showLeaderboard(this, idx);
@@ -565,11 +626,13 @@ function update(_t, delta) {
       this.splitAmount = 0;
       this.flatAmount = 0;
       this.seed = Math.floor(Math.random() * 128);
+      this.menuIndex = 0;
       this.state = 'menu';
       showMenu(this);
     }
   }
 
+  this.timer.setVisible(this.state === 'playing');
   this.timer.setText(Math.floor(this.gameTime));
   this.shader.setUniform('gameTime.value', this.gameTime);
   this.shader.setUniform('playerLane.value', this.smoothLane);
