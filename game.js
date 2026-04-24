@@ -217,9 +217,9 @@ void main(){
   float isObs = step(0.05, tunnelD) * (1.0 - isPlayer) * hit;
 
   float ring = 0.5 + 0.5 * cos(p.z * 0.5);
-  vec3 tunnelCol = mix(vec3(0.05, 0.35, 0.12), vec3(0.15, 0.95, 0.35), ring);
-  vec3 obsCol    = vec3(0.6, 1.0, 0.3);
-  vec3 playerCol = vec3(1.0, 0.95, 0.8);
+  vec3 tunnelCol = mix(vec3(0.08, 0.02, 0.22), vec3(0.2, 0.75, 0.95), ring);
+  vec3 obsCol    = vec3(1.0, 0.15, 0.65);
+  vec3 playerCol = vec3(1.0, 0.92, 0.7);
   vec3 col = mix(tunnelCol, obsCol, isObs);
   col = mix(col, playerCol, isPlayer);
 
