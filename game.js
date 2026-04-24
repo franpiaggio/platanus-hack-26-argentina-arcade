@@ -340,14 +340,19 @@ void main(){
   float angD = mod(wallAng - beamAng + 3.14159, 6.2832) - 3.14159;
   float coreA = exp(-angD * angD * 22.0);
   float haloA = exp(-angD * angD * 3.5);
+  float angD2 = mod(wallAng - beamAng, 6.2832) - 3.14159;
+  float coreA2 = exp(-angD2 * angD2 * 22.0);
+  float haloA2 = exp(-angD2 * angD2 * 3.5);
   float pulseZ = ro.z + mod(gameTime, 3.5) * 30.0;
   float pulseD = p.z - pulseZ;
   float zFront = exp(-max(pulseD, 0.0) * max(pulseD, 0.0) * 0.5);
   float zBack = exp(min(pulseD, 0.0) * 0.35);
   float zEnv = min(zFront, zBack);
   float beam = (coreA + haloA * 0.25) * zEnv;
+  float beam2 = (coreA2 + haloA2 * 0.25) * zEnv;
+  float beam2On = smoothstep(58.0, 62.0, gameTime);
   float beamOn = smoothstep(30.0, 33.0, gameTime);
-  col += vec3(0.7, 1.0, 1.3) * beam * 1.3 * beamOn * (1.0 - isPlayer) * (1.0 - isObs) * hit;
+  col += vec3(0.7, 1.0, 1.3) * (beam + beam2 * beam2On) * 1.3 * beamOn * (1.0 - isPlayer) * (1.0 - isObs) * hit;
 
   float focusD = 10.0;
   float defocus = smoothstep(3.0, 28.0, abs(t - focusD));
