@@ -37,27 +37,61 @@ vec3 playerAt(float z){
   return vec3(path(z).x + playerLane * 1.2, path(z).y, z);
 }
 
+float isColumnRow(float n){
+  return step(mod(mod(n * 17.0, 23.0) + mod(n * 29.0, 13.0), 5.0), 0.5);
+}
+
+float obsDist(vec3 q){
+  float rowIdx = floor((q.z + 2.5) / 15.0);
+  float rz = mod(q.z + 2.5, 15.0) - 7.5;
+  float freeLane = freeLaneOf(rowIdx);
+  float qy = q.y * (1.0 - isColumnRow(rowIdx));
+  float l0 = length(vec3(q.x + 1.2, qy, rz));
+  float l1 = length(vec3(q.x,       qy, rz));
+  float l2 = length(vec3(q.x - 1.2, qy, rz));
+  if (freeLane < 0.5) l0 = 100.0;
+  else if (freeLane < 1.5) l1 = 100.0;
+  else l2 = 100.0;
+  return min(l0, min(l1, l2)) - 0.5;
+}
+
+float mapNoPlayer(vec3 p){
+  vec3 q = p;
+  q.xy -= path(q.z);
+  float tunnel = 3.0 - length(q.xy);
+  return min(tunnel, obsDist(q));
+}
+
 float map(vec3 p){
   vec3 q = p;
   q.xy -= path(q.z);
   float tunnel = 3.0 - length(q.xy);
-
-  float rowIdx = floor((q.z + 2.5) / 15.0);
-  float rz = mod(q.z + 2.5, 15.0) - 7.5;
-  float freeLane = freeLaneOf(rowIdx);
-  float r = 0.55;
-  vec3 c0 = vec3(q.x + 1.2, q.y, rz);
-  vec3 c1 = vec3(q.x,       q.y, rz);
-  vec3 c2 = vec3(q.x - 1.2, q.y, rz);
-  if (freeLane < 0.5) c0.y += 100.0;
-  else if (freeLane < 1.5) c1.y += 100.0;
-  else c2.y += 100.0;
-  float obs = min(length(c0), min(length(c1), length(c2))) - r;
-
+  float obs = obsDist(q);
   float pz = playerZAt(gameTime);
-  float player = length(p - playerAt(pz)) - 0.4;
-
+  float player = length(p - playerAt(pz)) - 0.2;
   return min(tunnel, min(obs, player));
+}
+
+vec3 calcNormal(vec3 p){
+  vec2 e = vec2(0.01, 0.0);
+  return normalize(vec3(
+    mapNoPlayer(p+e.xyy) - mapNoPlayer(p-e.xyy),
+    mapNoPlayer(p+e.yxy) - mapNoPlayer(p-e.yxy),
+    mapNoPlayer(p+e.yyx) - mapNoPlayer(p-e.yyx)
+  ));
+}
+
+float softShadow(vec3 ro, vec3 rd, float mx){
+  float res = 1.0;
+  float t = 0.05;
+  for (int i = 0; i < 24; i++) {
+    if (t >= mx) break;
+    float h = mapNoPlayer(ro + rd * t);
+    if (h < 0.001) { res = 0.0; break; }
+    res = min(res, 12.0 * h / t);
+    t += h;
+  }
+  return clamp(res, 0.0, 1.0);
 }
 
 void main(){
@@ -85,7 +119,7 @@ void main(){
   vec3 p = ro + rd * t;
   vec3 q = p; q.xy -= path(q.z);
   float tunnelD = 3.0 - length(q.xy);
-  float playerD = length(p - playerAt(tt)) - 0.4;
+  float playerD = length(p - playerAt(tt)) - 0.2;
 
   float isPlayer = step(playerD, 0.05) * hit;
   float isObs = step(0.05, tunnelD) * (1.0 - isPlayer) * hit;
@@ -93,10 +127,29 @@ void main(){
   float ring = 0.5 + 0.5 * cos(p.z * 0.5);
   vec3 tunnelCol = mix(vec3(0.05, 0.35, 0.12), vec3(0.15, 0.95, 0.35), ring);
   vec3 obsCol    = vec3(0.6, 1.0, 0.3);
-  vec3 playerCol = vec3(0.3, 0.8, 1.0);
+  vec3 playerCol = vec3(1.0, 0.95, 0.8);
   vec3 col = mix(tunnelCol, obsCol, isObs);
   col = mix(col, playerCol, isPlayer);
-  col = mix(tunnelCol, col, hit);
+
+  vec3 lp = playerAt(tt);
+  if (hit > 0.5 && isPlayer < 0.5) {
+    vec3 n = calcNormal(p);
+    vec3 ld = lp - p;
+    float ldist = length(ld);
+    ld /= ldist;
+    float diff = max(dot(n, ld), 0.0);
+    float atten = 1.0 / (1.0 + ldist * 0.15 + ldist * ldist * 0.025);
+    float sh = softShadow(p + n * 0.05, ld, ldist - 0.5);
+    float cone = max(dot(normalize(p - lp), vec3(0.0, 0.0, 1.0)), 0.0);
+    cone = pow(cone, 1.5);
+    col *= 0.08 + 2.6 * diff * atten * sh * cone;
+  }
+
+  if (isPlayer > 0.5) {
+    col = playerCol;
+  }
+
+  col = mix(tunnelCol * 0.05, col, hit);
 
   float fog = 1.0 / (1.0 + t * t * 0.002);
   col *= fog;
@@ -194,7 +247,7 @@ function showMenu(scene) {
 function showNameEntry(scene) {
   clearOverlay(scene);
   addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 140, 'GAME OVER', 48, '#ff6666', true);
-  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80, 'TIME: ' + scene.finalScore.toFixed(1), 24, '#fff');
+  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80, 'TIME: ' + Math.floor(scene.finalScore), 24, '#fff');
   scene.nameSlots = [];
   for (let i = 0; i < 4; i++) {
     scene.nameSlots.push(addText(scene, GAME_WIDTH / 2 + (i - 1.5) * 60, GAME_HEIGHT / 2, 'A', 56, '#fff', true));
@@ -224,7 +277,7 @@ function showLeaderboard(scene, highlightIdx) {
   clearOverlay(scene);
   addText(scene, GAME_WIDTH / 2, 40, 'HIGH SCORES', 30, '#7acfff', true);
   scene.scores.forEach((e, i) => {
-    const line = (i + 1).toString().padStart(2, ' ') + '.  ' + e.name + '   ' + e.score.toFixed(1);
+    const line = (i + 1).toString().padStart(2, ' ') + '.  ' + e.name + '   ' + Math.floor(e.score);
     addText(scene, GAME_WIDTH / 2, 90 + i * 28, line, 20, i === highlightIdx ? '#ffff00' : '#fff');
   });
   pulse(scene, addText(scene, GAME_WIDTH / 2, GAME_HEIGHT - 30, 'PRESS ENTER TO CONTINUE', 18, '#aaa'));
@@ -256,7 +309,7 @@ function update(_t, delta) {
       for (let j = 0; j < 3; j++) {
         if (j === freeLane) continue;
         const dx = plx - (j - 1) * 1.2;
-        if (dx * dx + dz * dz < 0.9025) {
+        if (dx * dx + dz * dz < 0.49) {
           this.finalScore = this.gameTime;
           this.initials = [0, 0, 0, 0];
           this.slot = 0;
@@ -299,7 +352,7 @@ function update(_t, delta) {
     }
   }
 
-  this.timer.setText(this.gameTime.toFixed(1));
+  this.timer.setText(Math.floor(this.gameTime));
   this.shader.setUniform('gameTime.value', this.gameTime);
   this.shader.setUniform('playerLane.value', this.smoothLane);
 }
