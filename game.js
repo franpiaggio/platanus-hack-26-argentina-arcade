@@ -20,12 +20,21 @@ uniform vec2 resolution;
 uniform float gameTime;
 uniform float playerLane;
 
+float freeLaneOf(float i){
+  float n = mod(i, 128.0);
+  return mod(mod(n * 11.0, 7.0) + mod(n * 13.0, 5.0), 3.0);
+}
+
+float playerZAt(float t){
+  return 10.0 + 16.0 * t + 0.0125 * t * t;
+}
+
 vec2 path(float z){
   return vec2(sin(z*0.15)*2.0, cos(z*0.1)*1.5);
 }
 
 vec3 playerAt(float z){
-  return vec3(path(z).x + playerLane * 1.2, path(z).y - 0.8, z);
+  return vec3(path(z).x + playerLane * 1.2, path(z).y, z);
 }
 
 float map(vec3 p){
@@ -35,7 +44,7 @@ float map(vec3 p){
 
   float rowIdx = floor((q.z + 2.5) / 15.0);
   float rz = mod(q.z + 2.5, 15.0) - 7.5;
-  float freeLane = floor(fract(sin(rowIdx * 12.9898) * 43758.5453) * 3.0);
+  float freeLane = freeLaneOf(rowIdx);
   float r = 0.55;
   vec3 c0 = vec3(q.x + 1.2, q.y, rz);
   vec3 c1 = vec3(q.x,       q.y, rz);
@@ -45,7 +54,7 @@ float map(vec3 p){
   else c2.y += 100.0;
   float obs = min(length(c0), min(length(c1), length(c2))) - r;
 
-  float pz = gameTime * 4.0 + 10.0;
+  float pz = playerZAt(gameTime);
   float player = length(p - playerAt(pz)) - 0.4;
 
   return min(tunnel, min(obs, player));
@@ -54,9 +63,9 @@ float map(vec3 p){
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5 * resolution.xy) / resolution.y;
 
-  float tt = gameTime * 4.0 + 10.0;
+  float tt = playerZAt(gameTime);
   float cz = tt - 3.0;
-  vec3 ro = vec3(path(cz), cz);
+  vec3 ro = vec3(path(cz).x, path(cz).y + 0.8, cz);
   vec3 ta = vec3(path(tt + 5.0), tt + 5.0);
 
   vec3 f = normalize(ta - ro);
@@ -160,17 +169,18 @@ function update(_t, delta) {
     if (Phaser.Input.Keyboard.JustDown(this.keys.R)) this.lane = Math.min(1, this.lane + 1);
     this.smoothLane += (this.lane - this.smoothLane) * 0.2;
 
-    const pz = this.gameTime * 4.0 + 10.0;
+    const t = this.gameTime;
+    const pz = 10 + 16 * t + 0.0125 * t * t;
     const rowIdx = Math.floor((pz + 2.5) / 15);
     const dz = pz - (15 * rowIdx + 5);
     if (Math.abs(dz) < 0.95) {
-      const h = Math.sin(rowIdx * 12.9898) * 43758.5453;
-      const freeLane = Math.floor(3 * (h - Math.floor(h)));
+      const n = rowIdx % 128;
+      const freeLane = (((n * 11) % 7) + ((n * 13) % 5)) % 3;
       const plx = this.smoothLane * 1.2;
       for (let k = 0; k < 3; k++) {
         if (k === freeLane) continue;
         const dx = plx - (k - 1) * 1.2;
-        if (dx * dx + 0.64 + dz * dz < 0.9025) {
+        if (dx * dx + dz * dz < 0.9025) {
           this.state = 'gameover';
           showOverlay(this, 'GAME OVER', 'PRESS START', '#ff6666');
           break;
