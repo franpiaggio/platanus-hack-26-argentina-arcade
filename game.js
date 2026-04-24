@@ -120,6 +120,9 @@ const config = {
 
 new Phaser.Game(config);
 
+const STORAGE_KEY = 'tunnel-runner-scores';
+const MAX_SCORES = 10;
+
 function create() {
   const uniforms = {
     resolution: { type: '2f', value: { x: 0, y: 0 } },
@@ -133,43 +136,111 @@ function create() {
   this.keys = this.input.keyboard.addKeys({
     L: CABINET_KEYS.P1_L[0],
     R: CABINET_KEYS.P1_R[0],
+    U: CABINET_KEYS.P1_U[0],
+    D: CABINET_KEYS.P1_D[0],
     S: CABINET_KEYS.START1[0],
   });
   this.lane = 0;
   this.smoothLane = 0;
   this.gameTime = 0;
   this.state = 'menu';
+  this.initials = [0, 0, 0, 0];
+  this.slot = 0;
+  this.scores = [];
   this.timer = this.add.text(GAME_WIDTH - 16, 16, '0.0', {
     fontFamily: 'monospace', fontSize: '22px', color: '#fff',
   }).setOrigin(1, 0);
-  showOverlay(this, 'TUNNEL RUNNER', 'PRESS START', '#7acfff');
+
+  this.store = window.platanusArcadeStorage;
+  if (this.store) {
+    this.store.get(STORAGE_KEY).then((r) => {
+      if (r && r.found && Array.isArray(r.value)) {
+        this.scores = r.value
+          .filter((e) => e && typeof e.name === 'string' && typeof e.score === 'number')
+          .slice(0, MAX_SCORES);
+      }
+    });
+  }
+
+  showMenu(this);
 }
 
-function showOverlay(scene, title, hint, color) {
-  scene.title = scene.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 50, title, {
-    fontFamily: 'monospace', fontSize: '48px', color, fontStyle: 'bold',
+function addText(scene, x, y, text, size, color, bold) {
+  const t = scene.add.text(x, y, text, {
+    fontFamily: 'monospace', fontSize: size + 'px', color, fontStyle: bold ? 'bold' : '',
   }).setOrigin(0.5);
-  scene.hint = scene.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 30, hint, {
-    fontFamily: 'monospace', fontSize: '22px', color: '#fff',
-  }).setOrigin(0.5);
-  scene.tweens.add({ targets: scene.hint, alpha: 0.3, duration: 600, yoyo: true, repeat: -1 });
+  (scene.overlay || (scene.overlay = [])).push(t);
+  return t;
 }
 
-function hideOverlay(scene) {
-  scene.title.destroy();
-  scene.hint.destroy();
+function pulse(scene, t) {
+  scene.tweens.add({ targets: t, alpha: 0.3, duration: 600, yoyo: true, repeat: -1 });
+}
+
+function clearOverlay(scene) {
+  if (!scene.overlay) return;
+  scene.overlay.forEach((t) => { scene.tweens.killTweensOf(t); t.destroy(); });
+  scene.overlay = [];
+}
+
+function showMenu(scene) {
+  clearOverlay(scene);
+  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 50, 'TUNNEL RUNNER', 48, '#7acfff', true);
+  pulse(scene, addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 30, 'PRESS START', 22, '#fff'));
+}
+
+function showNameEntry(scene) {
+  clearOverlay(scene);
+  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 140, 'GAME OVER', 48, '#ff6666', true);
+  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80, 'TIME: ' + scene.finalScore.toFixed(1), 24, '#fff');
+  scene.nameSlots = [];
+  for (let i = 0; i < 4; i++) {
+    scene.nameSlots.push(addText(scene, GAME_WIDTH / 2 + (i - 1.5) * 60, GAME_HEIGHT / 2, 'A', 56, '#fff', true));
+  }
+  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 80, 'UP/DOWN  LEFT/RIGHT  ENTER', 16, '#aaa');
+  refreshNameEntry(scene);
+}
+
+function refreshNameEntry(scene) {
+  scene.nameSlots.forEach((t, i) => {
+    t.setText(String.fromCharCode(65 + scene.initials[i]));
+    t.setColor(i === scene.slot ? '#ffff00' : '#fff');
+  });
+}
+
+function initialsStr(scene) {
+  return scene.initials.map((i) => String.fromCharCode(65 + i)).join('');
+}
+
+function showConfirm(scene) {
+  clearOverlay(scene);
+  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 30, 'SAVE AS ' + initialsStr(scene) + '?', 32, '#7acfff', true);
+  pulse(scene, addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 30, 'PRESS ENTER', 22, '#fff'));
+}
+
+function showLeaderboard(scene, highlightIdx) {
+  clearOverlay(scene);
+  addText(scene, GAME_WIDTH / 2, 40, 'HIGH SCORES', 30, '#7acfff', true);
+  scene.scores.forEach((e, i) => {
+    const line = (i + 1).toString().padStart(2, ' ') + '.  ' + e.name + '   ' + e.score.toFixed(1);
+    addText(scene, GAME_WIDTH / 2, 90 + i * 28, line, 20, i === highlightIdx ? '#ffff00' : '#fff');
+  });
+  pulse(scene, addText(scene, GAME_WIDTH / 2, GAME_HEIGHT - 30, 'PRESS ENTER TO CONTINUE', 18, '#aaa'));
 }
 
 function update(_t, delta) {
+  const k = this.keys;
+  const JD = Phaser.Input.Keyboard.JustDown;
+
   if (this.state === 'menu') {
-    if (Phaser.Input.Keyboard.JustDown(this.keys.S)) {
-      hideOverlay(this);
+    if (JD(k.S)) {
+      clearOverlay(this);
       this.state = 'playing';
     }
   } else if (this.state === 'playing') {
     this.gameTime += delta * 0.001;
-    if (Phaser.Input.Keyboard.JustDown(this.keys.L)) this.lane = Math.max(-1, this.lane - 1);
-    if (Phaser.Input.Keyboard.JustDown(this.keys.R)) this.lane = Math.min(1, this.lane + 1);
+    if (JD(k.L)) this.lane = Math.max(-1, this.lane - 1);
+    if (JD(k.R)) this.lane = Math.min(1, this.lane + 1);
     this.smoothLane += (this.lane - this.smoothLane) * 0.2;
 
     const t = this.gameTime;
@@ -180,25 +251,52 @@ function update(_t, delta) {
       const n = rowIdx % 128;
       const freeLane = (((n * 11) % 7) + ((n * 13) % 5)) % 3;
       const plx = this.smoothLane * 1.2;
-      for (let k = 0; k < 3; k++) {
-        if (k === freeLane) continue;
-        const dx = plx - (k - 1) * 1.2;
+      for (let j = 0; j < 3; j++) {
+        if (j === freeLane) continue;
+        const dx = plx - (j - 1) * 1.2;
         if (dx * dx + dz * dz < 0.9025) {
-          this.state = 'gameover';
-          showOverlay(this, 'GAME OVER', 'PRESS START', '#ff6666');
+          this.finalScore = this.gameTime;
+          this.initials = [0, 0, 0, 0];
+          this.slot = 0;
+          this.state = 'nameEntry';
+          showNameEntry(this);
           break;
         }
       }
     }
-  } else {
-    if (Phaser.Input.Keyboard.JustDown(this.keys.S)) {
-      hideOverlay(this);
+  } else if (this.state === 'nameEntry') {
+    let changed = false;
+    if (JD(k.U)) { this.initials[this.slot] = (this.initials[this.slot] + 1) % 26; changed = true; }
+    if (JD(k.D)) { this.initials[this.slot] = (this.initials[this.slot] + 25) % 26; changed = true; }
+    if (JD(k.L)) { this.slot = Math.max(0, this.slot - 1); changed = true; }
+    if (JD(k.R)) { this.slot = Math.min(3, this.slot + 1); changed = true; }
+    if (changed) refreshNameEntry(this);
+    if (JD(k.S)) {
+      this.state = 'confirm';
+      showConfirm(this);
+    }
+  } else if (this.state === 'confirm') {
+    if (JD(k.S)) {
+      const entry = { name: initialsStr(this), score: this.finalScore, savedAt: new Date().toISOString() };
+      this.scores = this.scores
+        .concat(entry)
+        .sort((a, b) => b.score - a.score || (a.savedAt < b.savedAt ? 1 : -1))
+        .slice(0, MAX_SCORES);
+      if (this.store) this.store.set(STORAGE_KEY, this.scores);
+      const idx = this.scores.findIndex((e) => e.savedAt === entry.savedAt);
+      this.state = 'leaderboard';
+      showLeaderboard(this, idx);
+    }
+  } else if (this.state === 'leaderboard') {
+    if (JD(k.S)) {
       this.gameTime = 0;
       this.lane = 0;
       this.smoothLane = 0;
-      this.state = 'playing';
+      this.state = 'menu';
+      showMenu(this);
     }
   }
+
   this.timer.setText(this.gameTime.toFixed(1));
   this.shader.setUniform('gameTime.value', this.gameTime);
   this.shader.setUniform('playerLane.value', this.smoothLane);
