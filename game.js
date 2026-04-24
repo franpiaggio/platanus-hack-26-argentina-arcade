@@ -174,6 +174,18 @@ float softShadow(vec3 ro, vec3 rd, float mx){
   return clamp(res, 0.0, 1.0);
 }
 
+float lightContrib(vec3 p, vec3 n, vec3 lpos){
+  vec3 ld = lpos - p;
+  float dist = length(ld);
+  ld /= dist;
+  float diff = max(dot(n, ld), 0.0);
+  float atten = 1.0 / (1.0 + dist * 0.15 + dist * dist * 0.025);
+  float sh = softShadow(p + n * 0.05, ld, dist - 0.5);
+  float cone = max(dot(normalize(p - lpos), vec3(0.0, 0.0, 1.0)), 0.0);
+  cone = pow(cone, 1.5 - flatAmt * 0.8);
+  return diff * atten * sh * cone;
+}
+
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5 * resolution.xy) / resolution.y;
 
@@ -214,15 +226,10 @@ void main(){
   vec3 lp = playerAt(tt);
   if (hit > 0.5 && isPlayer < 0.5) {
     vec3 n = calcNormal(p);
-    vec3 ld = lp - p;
-    float ldist = length(ld);
-    ld /= ldist;
-    float diff = max(dot(n, ld), 0.0);
-    float atten = 1.0 / (1.0 + ldist * 0.15 + ldist * ldist * 0.025);
-    float sh = softShadow(p + n * 0.05, ld, ldist - 0.5);
-    float cone = max(dot(normalize(p - lp), vec3(0.0, 0.0, 1.0)), 0.0);
-    cone = pow(cone, 1.5);
-    col *= 0.08 + 2.6 * diff * atten * sh * cone;
+    vec3 off = vec3(0.0, splitAmt * 0.6, 0.0);
+    float cA = lightContrib(p, n, lp + off);
+    float cB = lightContrib(p, n, lp - off);
+    col *= 0.08 + 1.3 * (1.0 - flatAmt * 0.4) * (cA + cB);
   }
 
   if (isPlayer > 0.5) {
