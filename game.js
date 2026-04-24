@@ -301,11 +301,12 @@ void main(){
     float fres = pow(1.0 - abs(dot(nd, rd)), 2.2);
     float puls = 0.72 + 0.15 * sin(gameTime * 4.5);
     vec3 core = mix(vec3(0.75, 0.66, 0.42), vec3(0.92, 0.42, 0.18), frac);
-    vec3 rayCol = vec3(1.0, 0.85, 0.5);
+    vec3 rayCol = vec3(0.92, 0.8, 0.48);
     vec3 rimCol = vec3(0.8, 0.52, 1.05);
     float rayFade = 1.0 - smoothstep(0.05, 0.35, splitAmt);
+    float flatFade = 1.0 - smoothstep(0.05, 0.35, flatAmt);
     vec3 base = core * puls;
-    base += rayCol * rays * 0.32 * rayFade;
+    base += rayCol * rays * 0.25 * rayFade * flatFade;
     base += rimCol * fres * 0.55;
     col = base;
   }
@@ -326,7 +327,8 @@ void main(){
   rayHalo = pow(max(rayHalo, 0.0), 2.0);
   float rayFall = exp(-max(minPD, 0.0) * 3.2);
   float haloFade = 1.0 - smoothstep(0.05, 0.35, splitAmt);
-  col += vec3(1.0, 0.85, 0.55) * rayHalo * rayFall * 0.45 * haloFade;
+  float haloFlat = 1.0 - smoothstep(0.05, 0.35, flatAmt);
+  col += vec3(1.0, 0.85, 0.55) * rayHalo * rayFall * 0.45 * haloFade * haloFlat;
 
   gl_FragColor = vec4(col, 1.0);
 }
