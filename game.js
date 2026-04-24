@@ -335,6 +335,20 @@ void main(){
   float fog = 1.0 / (1.0 + t * t * 0.002);
   col *= fog;
 
+  float wallAng = atan(q.y, q.x);
+  float beamAng = gameTime * 0.6;
+  float angD = mod(wallAng - beamAng + 3.14159, 6.2832) - 3.14159;
+  float coreA = exp(-angD * angD * 22.0);
+  float haloA = exp(-angD * angD * 3.5);
+  float pulseZ = ro.z + mod(gameTime, 3.5) * 30.0;
+  float pulseD = p.z - pulseZ;
+  float zFront = exp(-max(pulseD, 0.0) * max(pulseD, 0.0) * 0.5);
+  float zBack = exp(min(pulseD, 0.0) * 0.35);
+  float zEnv = min(zFront, zBack);
+  float beam = (coreA + haloA * 0.25) * zEnv;
+  float beamOn = smoothstep(30.0, 33.0, gameTime);
+  col += vec3(0.7, 1.0, 1.3) * beam * 1.3 * beamOn * (1.0 - isPlayer) * (1.0 - isObs) * hit;
+
   float focusD = 10.0;
   float defocus = smoothstep(3.0, 28.0, abs(t - focusD));
   vec3 hazeCol = palDark * 1.6 + palLight * 0.25;
