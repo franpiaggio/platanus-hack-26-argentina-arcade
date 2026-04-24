@@ -402,7 +402,6 @@ function create() {
         .filter((e) => e && typeof e.name === 'string' && typeof e.score === 'number')
         .slice(0, MAX_SCORES);
     }
-    if (this.state === 'menu') showMenu(this);
   });
 
   showMenu(this);
@@ -444,15 +443,6 @@ function showMenu(scene) {
     (scene.overlay || (scene.overlay = [])).push(g);
     addText(scene, GAME_WIDTH / 2, y, label, 22, sel ? '#0a0f1f' : '#fff', true);
   });
-
-  addText(scene, GAME_WIDTH / 2, 448, 'TOP SCORES', 15, '#7acfff', true);
-  if (!scene.scores.length) {
-    addText(scene, GAME_WIDTH / 2, 478, 'NO SAVED SCORES YET', 14, '#666');
-  } else {
-    scene.scores.slice(0, 3).forEach((e, i) => {
-      addText(scene, GAME_WIDTH / 2, 478 + i * 20, (i + 1) + '.  ' + e.name + '   ' + Math.floor(e.score), 15, '#bbb');
-    });
-  }
 
   addText(scene, GAME_WIDTH / 2, GAME_HEIGHT - 24, 'JOYSTICK · START', 13, '#555');
 }
@@ -498,8 +488,9 @@ function initialsStr(scene) {
 
 function showConfirm(scene) {
   clearOverlay(scene);
-  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 30, 'SAVE AS ' + initialsStr(scene) + '?', 32, '#7acfff', true);
-  pulse(scene, addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 30, 'PRESS ENTER', 22, '#fff'));
+  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, 'SAVE AS ' + initialsStr(scene) + '?', 32, '#7acfff', true);
+  pulse(scene, addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20, 'START · CONFIRM', 22, '#fff'));
+  addText(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 60, 'BUTTON 2 · BACK', 16, '#888');
 }
 
 function showLeaderboard(scene, highlightIdx) {
@@ -607,7 +598,10 @@ function update(_t, delta) {
       showConfirm(this);
     }
   } else if (this.state === 'confirm') {
-    if (JD(k.S)) {
+    if (JD(k.A2)) {
+      this.state = 'nameEntry';
+      showNameEntry(this);
+    } else if (JD(k.S)) {
       const entry = { name: initialsStr(this), score: this.finalScore, savedAt: new Date().toISOString() };
       this.scores = this.scores
         .concat(entry)
