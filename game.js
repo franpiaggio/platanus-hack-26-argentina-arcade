@@ -96,7 +96,8 @@ float rowKind(float i){
   if (i < 23.0 && k > 2.5) k = 0.0;
   float ne = mod(i + seed * 11.0, 128.0);
   float he = mod(mod(ne * 41.0, 17.0) + mod(ne * 43.0, 11.0), 10.0);
-  if (he > 3.5) k = 4.0;
+  float emptyStep = step(60.0, gameTime) + step(100.0, gameTime);
+  if (he > 3.5 + emptyStep) k = 4.0;
   float nd = mod(i + seed * 13.0, 128.0);
   float hd = mod(mod(nd * 47.0, 19.0) + mod(nd * 53.0, 13.0), 10.0);
   if (i >= 90.0 && hd > 8.5) k = 5.0;
@@ -252,9 +253,25 @@ void main(){
   float isObs = step(0.05, tunnelD) * (1.0 - isPlayer) * hit;
 
   float ring = 0.5 + 0.5 * cos(p.z * 0.5);
-  vec3 tunnelCol = mix(vec3(0.08, 0.02, 0.22), vec3(0.2, 0.75, 0.95), ring);
+  float palP = gameTime / 40.0;
+  float palI = mod(floor(palP), 4.0);
+  float palT = smoothstep(0.0, 1.0, fract(palP));
+  vec3 bD = vec3(0.02, 0.04, 0.15), bL = vec3(0.12, 0.6, 1.0);
+  vec3 gD = vec3(0.02, 0.1, 0.06),  gL = vec3(0.25, 0.9, 0.55);
+  vec3 rD = vec3(0.12, 0.02, 0.08), rL = vec3(1.0, 0.4, 0.45);
+  vec3 dA, dB, lA, lB;
+  if (palI < 0.5) {
+    dA = bD; lA = bL; dB = gD; lB = gL;
+  } else if (palI < 1.5) {
+    dA = gD; lA = gL; dB = bD; lB = bL;
+  } else if (palI < 2.5) {
+    dA = bD; lA = bL; dB = rD; lB = rL;
+  } else {
+    dA = rD; lA = rL; dB = bD; lB = bL;
+  }
+  vec3 tunnelCol = mix(mix(dA, dB, palT), mix(lA, lB, palT), ring);
   float qShift = 0.5 + 0.5 * sin(p.z * 0.3 + gameTime * 0.6);
-  vec3 obsCol    = mix(vec3(0.2, 0.9, 0.65), vec3(0.55, 0.25, 0.9), qShift);
+  vec3 obsCol    = mix(vec3(0.18, 0.85, 0.72), vec3(0.28, 0.95, 0.85), qShift);
   vec3 playerCol = vec3(1.0, 0.92, 0.7);
   vec3 col = mix(tunnelCol, obsCol, isObs);
   col = mix(col, playerCol, isPlayer);
@@ -300,9 +317,9 @@ void main(){
     rays = pow(max(rays, 0.0), 2.0);
     float fres = pow(1.0 - abs(dot(nd, rd)), 2.2);
     float puls = 0.72 + 0.15 * sin(gameTime * 4.5);
-    vec3 core = mix(vec3(0.75, 0.66, 0.42), vec3(0.92, 0.42, 0.18), frac);
-    vec3 rayCol = vec3(0.92, 0.8, 0.48);
-    vec3 rimCol = vec3(0.8, 0.52, 1.05);
+    vec3 core = mix(vec3(0.9, 0.4, 0.35), vec3(1.0, 0.55, 0.32), frac);
+    vec3 rayCol = vec3(1.0, 0.55, 0.6);
+    vec3 rimCol = vec3(1.0, 0.5, 0.85);
     float rayFade = 1.0 - smoothstep(0.05, 0.35, splitAmt);
     float flatFade = 1.0 - smoothstep(0.05, 0.35, flatAmt);
     vec3 base = core * puls;
@@ -318,7 +335,7 @@ void main(){
 
   float glow = exp(-max(minPD, 0.0) * 8.5);
   float glowPuls = 0.85 + 0.15 * sin(gameTime * 3.2);
-  col += vec3(0.8, 0.5, 1.0) * glow * glowPuls * 0.32;
+  col += vec3(1.0, 0.4, 0.75) * glow * glowPuls * 0.32;
 
 
   gl_FragColor = vec4(col, 1.0);
@@ -420,7 +437,7 @@ function showMenu(scene) {
   clearOverlay(scene);
   addText(scene, GAME_WIDTH / 2, 68, 'PLATANUS HACK 26 · BUENOS AIRES', 13, '#7acfff', true);
   addText(scene, GAME_WIDTH / 2, 138, 'QUANTUM TUNNEL', 52, '#b8ffea', true);
-  addText(scene, GAME_WIDTH / 2, 184, 'collapse the wavefunction · clear the path', 13, '#6ab4c5');
+  addText(scene, GAME_WIDTH / 2, 184, 'collapse the wavefunction · clear the path', 13, '#ff6ec7');
 
   const items = ['PLAY', 'LEADERBOARD', 'CONTROLS'];
   items.forEach((label, i) => {
@@ -470,6 +487,9 @@ function refreshNameEntry(scene) {
   scene.nameSlots.forEach((t, i) => {
     t.setText(String.fromCharCode(65 + scene.initials[i]));
     t.setColor(i === scene.slot ? '#ffff00' : '#fff');
+    scene.tweens.killTweensOf(t);
+    t.setAlpha(1);
+    if (i === scene.slot) pulse(scene, t);
   });
 }
 
@@ -545,7 +565,8 @@ function update(_t, delta) {
       if (rowIdx < 23 && k > 2) k = 0;
       const ne = (((rowIdx + this.seed * 11) % 128) + 128) % 128;
       const he = ((ne * 41) % 17 + (ne * 43) % 11) % 10;
-      if (he >= 4) k = 4;
+      const emptyStep = (t >= 60 ? 1 : 0) + (t >= 100 ? 1 : 0);
+      if (he >= 4 + emptyStep) k = 4;
       const nd = (((rowIdx + this.seed * 13) % 128) + 128) % 128;
       const hd = ((nd * 47) % 19 + (nd * 53) % 13) % 10;
       if (rowIdx >= 90 && hd >= 9) k = 5;
