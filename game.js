@@ -272,7 +272,14 @@ void main(){
   }
   vec3 palDark = mix(dA, dB, palT);
   vec3 palLight = mix(lA, lB, palT);
-  vec3 tunnelCol = mix(palDark, palLight, ring);
+  float cNoise = Voronesque(p * 0.28 + vec3(gameTime * 0.04, gameTime * 0.03, gameTime * 0.05));
+  float cBand = 0.5 + 0.5 * sin(atan(q.y, q.x) * 2.0 + p.z * 0.12);
+  float cMix = clamp(cNoise * 0.7 + cBand * 0.4, 0.0, 1.0);
+  vec3 cWarm = vec3(1.2, 0.85, 0.7);
+  vec3 cCool = vec3(0.7, 0.95, 1.25);
+  vec3 tintL = mix(cCool, cWarm, cMix);
+  vec3 tintD = mix(vec3(0.8, 1.0, 1.2), vec3(1.2, 0.95, 0.85), cMix);
+  vec3 tunnelCol = mix(palDark * tintD, palLight * tintL, ring);
   float qShift = 0.5 + 0.5 * sin(p.z * 0.3 + gameTime * 0.6);
   vec3 obsCol    = mix(vec3(0.18, 0.85, 0.72), vec3(0.28, 0.95, 0.85), qShift);
   vec3 playerCol = vec3(1.0, 0.92, 0.7);
@@ -282,12 +289,13 @@ void main(){
   vec3 lp = playerAt(tt);
   if (hit > 0.5 && isPlayer < 0.5) {
     vec3 n = calcNormal(p);
-    float vc = Voronesque(p * 2.5);
+    vec3 vFlow = vec3(gameTime * 0.06, gameTime * 0.045, gameTime * 0.08);
+    float vc = Voronesque(p * 2.5 + vFlow);
     vec2 eps = vec2(0.025, 0.0);
     vec3 gr = (vec3(
-      Voronesque((p - eps.xyy) * 2.5),
-      Voronesque((p - eps.yxy) * 2.5),
-      Voronesque((p - eps.yyx) * 2.5)
+      Voronesque((p - eps.xyy) * 2.5 + vFlow),
+      Voronesque((p - eps.yxy) * 2.5 + vFlow),
+      Voronesque((p - eps.yyx) * 2.5 + vFlow)
     ) - vc) / eps.x;
     gr -= n * dot(n, gr);
     n = normalize(n + gr * 0.08);
@@ -308,8 +316,8 @@ void main(){
     rr = vec3(rr.x, cb * rr.y - sb * rr.z, sb * rr.y + cb * rr.z);
     vec3 nd = normalize(rel);
     float wob = 1.0 + 0.22 * sin(gameTime * 6.5 + rel.x * 4.0 + rel.y * 3.0);
-    vec3 flow1 = vec3(sin(gameTime * 0.9) * 2.0, cos(gameTime * 1.2) * 1.6, gameTime * 2.4);
-    vec3 flow2 = vec3(cos(gameTime * 1.4) * 1.8, sin(gameTime * 1.1) * 2.0, -gameTime * 1.7);
+    vec3 flow1 = vec3(gameTime * 0.08, gameTime * 0.06, gameTime * 0.1);
+    vec3 flow2 = vec3(-gameTime * 0.07, gameTime * 0.09, -gameTime * 0.08);
     float n1 = Voronesque(rr * 9.0 * wob + flow1);
     float n2 = Voronesque(rr * 22.0 + flow2);
     float frac = clamp(n1 * 0.7 + n2 * 0.45, 0.0, 1.0);
