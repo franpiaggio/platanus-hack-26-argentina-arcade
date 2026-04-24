@@ -495,6 +495,48 @@ function playHiHat(scene, accent) {
   src.stop(now + 0.08);
 }
 
+function playLoseFx(scene) {
+  const a = scene.audio;
+  if (!a || !a.fxBus || !a.noiseBuf) return;
+  const ctx = a.ctx;
+  const now = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = a.noiseBuf;
+  src.loop = true;
+  const nf = ctx.createBiquadFilter();
+  nf.type = 'lowpass';
+  nf.Q.value = 2;
+  nf.frequency.setValueAtTime(3000, now);
+  nf.frequency.exponentialRampToValueAtTime(150, now + 1.2);
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.0001, now);
+  ng.gain.exponentialRampToValueAtTime(0.22, now + 0.02);
+  ng.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+  src.connect(nf);
+  nf.connect(ng);
+  ng.connect(a.fxBus);
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(400, now);
+  osc.frequency.exponentialRampToValueAtTime(50, now + 1.0);
+  const of = ctx.createBiquadFilter();
+  of.type = 'lowpass';
+  of.Q.value = 4;
+  of.frequency.setValueAtTime(1500, now);
+  of.frequency.exponentialRampToValueAtTime(150, now + 1.2);
+  const og = ctx.createGain();
+  og.gain.setValueAtTime(0.0001, now);
+  og.gain.exponentialRampToValueAtTime(0.15, now + 0.015);
+  og.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+  osc.connect(of);
+  of.connect(og);
+  og.connect(a.fxBus);
+  src.start(now);
+  osc.start(now);
+  src.stop(now + 1.3);
+  osc.stop(now + 1.3);
+}
+
 function playFlatFx(scene) {
   const a = scene.audio;
   if (!a || !a.fxBus || !a.noiseBuf) return;
@@ -581,7 +623,8 @@ function updateDrone(scene) {
   const a = scene.audio;
   if (!a) return;
   const now = a.ctx.currentTime;
-  const root = droneRootHz(scene.gameTime);
+  const inMenu = scene.state === 'menu' || scene.state === 'controls';
+  const root = scene.state === 'playing' ? droneRootHz(scene.gameTime) : DRONE_POOLS[0][DRONE_SEQ[0]];
   if (root !== a.lastRoot) {
     for (let i = 0; i < a.voices.length; i++) {
       const f = a.voices[i].o.frequency;
@@ -591,9 +634,9 @@ function updateDrone(scene) {
     }
     a.lastRoot = root;
   }
-  const target = scene.state === 'playing' ? 0.085 : scene.state === 'menu' || scene.state === 'controls' ? 0.04 : 0.025;
+  const target = scene.state === 'playing' ? 0.085 : inMenu ? 0.04 : 0;
   if (a.lastGain !== target) {
-    a.master.gain.setTargetAtTime(target, now, 0.6);
+    a.master.gain.setTargetAtTime(target, now, scene.state === 'playing' ? 0.6 : 0.3);
     a.lastGain = target;
   }
 }
@@ -847,6 +890,7 @@ function update(_t, delta) {
         this.initials = [0, 0, 0, 0];
         this.slot = 0;
         this.state = 'nameEntry';
+        playLoseFx(this);
         showNameEntry(this);
       }
     }
