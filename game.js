@@ -74,11 +74,12 @@ void main(){
   vec3 rd = normalize(uv.x * r + uv.y * u + 1.5 * f);
 
   float t = 0.0;
-  for (int i = 0; i < 72; i++) {
+  float hit = 0.0;
+  for (int i = 0; i < 128; i++) {
     float d = map(ro + rd * t);
-    if (d < 0.01) break;
-    t += d * 0.8;
-    if (t > 80.0) break;
+    if (d < 0.01) { hit = 1.0; break; }
+    t += d * 0.95;
+    if (t > 120.0) break;
   }
 
   vec3 p = ro + rd * t;
@@ -86,15 +87,16 @@ void main(){
   float tunnelD = 3.0 - length(q.xy);
   float playerD = length(p - playerAt(tt)) - 0.4;
 
-  float isPlayer = step(playerD, 0.05);
-  float isObs = step(0.05, tunnelD) * (1.0 - isPlayer);
+  float isPlayer = step(playerD, 0.05) * hit;
+  float isObs = step(0.05, tunnelD) * (1.0 - isPlayer) * hit;
 
   float ring = 0.5 + 0.5 * cos(p.z * 0.5);
   vec3 tunnelCol = mix(vec3(0.05, 0.35, 0.12), vec3(0.15, 0.95, 0.35), ring);
-  vec3 obsCol    = vec3(1.0, 0.55, 0.1);
+  vec3 obsCol    = vec3(0.6, 1.0, 0.3);
   vec3 playerCol = vec3(0.3, 0.8, 1.0);
   vec3 col = mix(tunnelCol, obsCol, isObs);
   col = mix(col, playerCol, isPlayer);
+  col = mix(tunnelCol, col, hit);
 
   float fog = 1.0 / (1.0 + t * t * 0.002);
   col *= fog;
