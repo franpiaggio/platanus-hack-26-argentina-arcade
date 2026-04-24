@@ -504,15 +504,17 @@ function update(_t, delta) {
       const nd = (((rowIdx + this.seed * 13) % 128) + 128) % 128;
       const hd = ((nd * 47) % 19 + (nd * 53) % 13) % 10;
       if (rowIdx >= 90 && hd >= 9) k = 5;
+      const effSplit = this.keys.A1.isDown ? 1 : this.splitAmount;
+      const effFlat = this.keys.A2.isDown ? 1 : this.flatAmount;
       let hit = false;
       if (k === 5) {
-        hit = this.splitAmount < 0.85 || this.flatAmount < 0.85;
+        hit = effSplit < 0.85 || effFlat < 0.85;
       } else if (k === 4) {
         hit = false;
       } else if (k === 3) {
-        hit = this.flatAmount < 0.9;
+        hit = effFlat < 0.9;
       } else if (k === 2) {
-        hit = this.splitAmount < 0.9;
+        hit = effSplit < 0.9;
       } else {
         const freeLane = (((n * 11) % 7) + ((n * 13) % 5)) % 3;
         const plx = this.smoothLane * 1.2;
