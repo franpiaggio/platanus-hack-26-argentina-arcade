@@ -139,6 +139,9 @@ function create() {
   this.smoothLane = 0;
   this.gameTime = 0;
   this.state = 'menu';
+  this.timer = this.add.text(GAME_WIDTH - 16, 16, '0.0', {
+    fontFamily: 'monospace', fontSize: '22px', color: '#fff',
+  }).setOrigin(1, 0);
   showOverlay(this, 'TUNNEL RUNNER', 'PRESS START', '#7acfff');
 }
 
@@ -196,6 +199,7 @@ function update(_t, delta) {
       this.state = 'playing';
     }
   }
+  this.timer.setText(this.gameTime.toFixed(1));
   this.shader.setUniform('gameTime.value', this.gameTime);
   this.shader.setUniform('playerLane.value', this.smoothLane);
 }
