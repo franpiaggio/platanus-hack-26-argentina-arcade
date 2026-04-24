@@ -220,21 +220,21 @@ void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5 * resolution.xy) / resolution.y;
 
   float tt = playerZAt(gameTime);
-  float cz = tt - 3.0;
+  float cz = tt - 1.25;
   vec3 ro = vec3(path(cz).x, path(cz).y + 0.8, cz);
   vec3 ta = vec3(path(tt + 5.0), tt + 5.0);
 
   vec3 f = normalize(ta - ro);
   vec3 r = normalize(cross(vec3(0.0, 1.0, 0.0), f));
   vec3 u = cross(f, r);
-  vec3 rd = normalize(uv.x * r + uv.y * u + 1.5 * f);
+  vec3 rd = normalize(uv.x * r + uv.y * u + 0.65 * f);
 
   float t = 0.0;
   float hit = 0.0;
   float minPD = 100.0;
   vec3 plc = playerAt(playerZAt(gameTime));
   float plDepth = max(dot(plc - ro, f), 0.01);
-  vec2 uvPlayer = 1.5 * vec2(dot(plc - ro, r), dot(plc - ro, u)) / plDepth;
+  vec2 uvPlayer = 0.65 * vec2(dot(plc - ro, r), dot(plc - ro, u)) / plDepth;
   for (int i = 0; i < 128; i++) {
     vec3 pp = ro + rd * t;
     minPD = min(minPD, playerSDF(pp, plc));
