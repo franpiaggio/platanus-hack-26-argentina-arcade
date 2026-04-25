@@ -100,7 +100,7 @@ float rowKind(float i){
   float emptyStep = step(54.0, i) + step(105.0, i);
   if (he > 3.5 + emptyStep) k = 4.0;
   float nd = mod(i + seed * 13.0, 128.0);
-  float hd = mod(mod(nd * 47.0, 19.0) + mod(nd * 53.0, 13.0), 10.0);
+  float hd = mod(mod(nd * 47.0, 19.0) + mod(nd * 41.0, 13.0), 10.0);
   if (i >= 90.0 && hd > 8.5) k = 5.0;
   return k;
 }
@@ -529,6 +529,35 @@ function playMoveFx(scene, dir) {
   src.stop(now + 0.22);
 }
 
+function playClap(scene) {
+  const a = scene.audio;
+  if (!a || !a.fxBus || !a.noiseBuf) return;
+  const ctx = a.ctx;
+  const now = ctx.currentTime;
+  const offsets = [0.0, 0.012, 0.024, 0.038];
+  const peaks = [0.22, 0.26, 0.24, 0.42];
+  const tails = [0.028, 0.028, 0.028, 0.22];
+  for (let i = 0; i < 4; i++) {
+    const t = now + offsets[i];
+    const src = ctx.createBufferSource();
+    src.buffer = a.noiseBuf;
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1700;
+    filter.Q.value = 1.3;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peaks[i], t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + tails[i]);
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(a.fxBus);
+    src.start(t);
+    src.stop(t + tails[i] + 0.03);
+  }
+}
+
 function playHiHat(scene, accent) {
   const a = scene.audio;
   if (!a || !a.fxBus || !a.noiseBuf) return;
@@ -670,7 +699,7 @@ function rowKindOf(seed, i) {
   const emptyStep = (i >= 54 ? 1 : 0) + (i >= 105 ? 1 : 0);
   if (he >= 4 + emptyStep) k = 4;
   const nd = (((i + seed * 13) % 128) + 128) % 128;
-  const hd = ((nd * 47) % 19 + (nd * 53) % 13) % 10;
+  const hd = ((nd * 47) % 19 + (nd * 41) % 13) % 10;
   if (i >= 90 && hd >= 9) k = 5;
   return k;
 }
@@ -915,6 +944,7 @@ function update(_t, delta) {
       this.lastBeatIdx = bi;
       if (!this.musicMuted && bi % 4 === 0) playKick(this);
       if (!this.musicMuted && this.gameTime >= 6 && bi % 4 === 2) playHiHat(this, 1);
+      if (!this.musicMuted && this.gameTime >= 8 && bi % 16 === 8) playClap(this);
     }
     if (JD(k.L)) {
       this.lane = Math.max(-1, this.lane - 1);
