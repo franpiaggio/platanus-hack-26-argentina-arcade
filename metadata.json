@@ -1,5 +1,5 @@
 {
   "game_name": "Quantum Tunnel",
-  "description": "Pilot a quantum particle through a collapsing tunnel. Every frame raymarched from pure math and signed distance fields. Split to pass horizontal bars, flatten to pass vertical slits. In homage to Pablo Andrioli, aka 'Kali', mentor and luminary of Argentine shader art.",
+  "description": "Pilot a quantum particle through a tunnel morphing between dimensions. Every frame raymarched from pure math and signed distance fields. Split to pass horizontal bars, flatten to pass vertical slits. In homage to Pablo Andrioli, aka 'Kali', mentor and luminary of Argentine shader art.",
   "player_mode": "single_player"
 }
