@@ -920,7 +920,7 @@ function update(_t, delta) {
     if (JD(k.U)) { this.menuIndex = (this.menuIndex + 3) % 4; redraw = true; }
     if (JD(k.D)) { this.menuIndex = (this.menuIndex + 1) % 4; redraw = true; }
     if (redraw) showMenu(this);
-    if (JD(k.S)) {
+    if (JD(k.S) || JD(k.A1)) {
       if (this.menuIndex === 0) {
         clearOverlay(this);
         this.state = 'playing';
