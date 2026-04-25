@@ -1017,7 +1017,7 @@ function update(_t, delta) {
     if (JD(k.L)) { this.slot = Math.max(0, this.slot - 1); changed = true; }
     if (JD(k.R)) { this.slot = Math.min(3, this.slot + 1); changed = true; }
     if (changed) refreshNameEntry(this);
-    if (JD(k.S)) {
+    if (JD(k.S) || JD(k.A1)) {
       if (this.slot < 3) {
         this.slot += 1;
         refreshNameEntry(this);
@@ -1030,7 +1030,7 @@ function update(_t, delta) {
     if (JD(k.A2)) {
       this.state = 'nameEntry';
       showNameEntry(this);
-    } else if (JD(k.S)) {
+    } else if (JD(k.S) || JD(k.A1)) {
       const entry = { name: initialsStr(this), score: this.finalScore, savedAt: new Date().toISOString() };
       this.scores = this.scores
         .concat(entry)
@@ -1042,7 +1042,7 @@ function update(_t, delta) {
       showLeaderboard(this, idx);
     }
   } else if (this.state === 'leaderboard') {
-    if (JD(k.S)) {
+    if (JD(k.S) || JD(k.A1)) {
       this.gameTime = 0;
       this.lane = 0;
       this.smoothLane = 0;
