@@ -448,7 +448,7 @@ const DRONE_POOLS = [
   [65.41, 77.78, 87.31, 98.00, 116.54],
 ];
 const DRONE_SEQ = [0, 2, 1, 4];
-const DRONE_HOLD = 10;
+const DRONE_HOLD = 8;
 
 function droneRootHz(t) {
   const step = Math.floor(Math.max(t, 0) / DRONE_HOLD);
@@ -542,8 +542,8 @@ function playHiHat(scene, accent) {
   filter.frequency.value = 6500;
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, now);
-  g.gain.exponentialRampToValueAtTime(0.05 * accent, now + 0.003);
-  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+  g.gain.exponentialRampToValueAtTime(0.26 * accent, now + 0.003);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
   src.connect(filter);
   filter.connect(g);
   g.connect(a.fxBus);
@@ -914,7 +914,7 @@ function update(_t, delta) {
     if (bi !== this.lastBeatIdx) {
       this.lastBeatIdx = bi;
       if (!this.musicMuted && bi % 4 === 0) playKick(this);
-      if (!this.musicMuted && this.gameTime >= 30 && bi % 4 === 2) playHiHat(this, 1);
+      if (!this.musicMuted && this.gameTime >= 6 && bi % 4 === 2) playHiHat(this, 1);
     }
     if (JD(k.L)) {
       this.lane = Math.max(-1, this.lane - 1);
@@ -984,8 +984,13 @@ function update(_t, delta) {
     if (JD(k.R)) { this.slot = Math.min(3, this.slot + 1); changed = true; }
     if (changed) refreshNameEntry(this);
     if (JD(k.S)) {
-      this.state = 'confirm';
-      showConfirm(this);
+      if (this.slot < 3) {
+        this.slot += 1;
+        refreshNameEntry(this);
+      } else {
+        this.state = 'confirm';
+        showConfirm(this);
+      }
     }
   } else if (this.state === 'confirm') {
     if (JD(k.A2)) {
