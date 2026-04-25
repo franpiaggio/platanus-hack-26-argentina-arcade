@@ -254,22 +254,26 @@ void main(){
   float isObs = step(0.05, tunnelD) * (1.0 - isPlayer) * hit;
 
   float ring = 0.5 + 0.5 * cos(p.z * 0.5);
-  float palP = gameTime / 40.0;
-  float palI = mod(floor(palP), 4.0);
+  float palP = gameTime / 15.0;
+  float palI = mod(floor(palP), 8.0);
   float palT = smoothstep(0.0, 1.0, fract(palP));
-  vec3 bD = vec3(0.02, 0.04, 0.15), bL = vec3(0.12, 0.6, 1.0);
-  vec3 gD = vec3(0.02, 0.1, 0.06),  gL = vec3(0.25, 0.9, 0.55);
-  vec3 rD = vec3(0.12, 0.02, 0.08), rL = vec3(1.0, 0.4, 0.45);
+  vec3 cD0 = vec3(0.02, 0.04, 0.15), cL0 = vec3(0.12, 0.60, 1.00);
+  vec3 cD1 = vec3(0.02, 0.10, 0.16), cL1 = vec3(0.20, 0.85, 0.95);
+  vec3 cD2 = vec3(0.02, 0.10, 0.06), cL2 = vec3(0.25, 0.90, 0.55);
+  vec3 cD3 = vec3(0.07, 0.10, 0.02), cL3 = vec3(0.70, 0.95, 0.30);
+  vec3 cD4 = vec3(0.12, 0.07, 0.02), cL4 = vec3(1.00, 0.75, 0.25);
+  vec3 cD5 = vec3(0.12, 0.02, 0.04), cL5 = vec3(1.00, 0.35, 0.30);
+  vec3 cD6 = vec3(0.10, 0.02, 0.12), cL6 = vec3(1.00, 0.40, 0.85);
+  vec3 cD7 = vec3(0.06, 0.02, 0.14), cL7 = vec3(0.65, 0.30, 1.00);
   vec3 dA, dB, lA, lB;
-  if (palI < 0.5) {
-    dA = bD; lA = bL; dB = gD; lB = gL;
-  } else if (palI < 1.5) {
-    dA = gD; lA = gL; dB = bD; lB = bL;
-  } else if (palI < 2.5) {
-    dA = bD; lA = bL; dB = rD; lB = rL;
-  } else {
-    dA = rD; lA = rL; dB = bD; lB = bL;
-  }
+  if (palI < 0.5) { dA = cD0; lA = cL0; dB = cD1; lB = cL1; }
+  else if (palI < 1.5) { dA = cD1; lA = cL1; dB = cD2; lB = cL2; }
+  else if (palI < 2.5) { dA = cD2; lA = cL2; dB = cD3; lB = cL3; }
+  else if (palI < 3.5) { dA = cD3; lA = cL3; dB = cD4; lB = cL4; }
+  else if (palI < 4.5) { dA = cD4; lA = cL4; dB = cD5; lB = cL5; }
+  else if (palI < 5.5) { dA = cD5; lA = cL5; dB = cD6; lB = cL6; }
+  else if (palI < 6.5) { dA = cD6; lA = cL6; dB = cD7; lB = cL7; }
+  else { dA = cD7; lA = cL7; dB = cD0; lB = cL0; }
   vec3 palDark = mix(dA, dB, palT);
   vec3 palLight = mix(lA, lB, palT);
   float cNoise = Voronesque(p * 0.28 + vec3(gameTime * 0.12, gameTime * 0.09, gameTime * 0.15));
